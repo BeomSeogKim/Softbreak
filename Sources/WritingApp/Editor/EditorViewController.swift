@@ -23,7 +23,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = .textBackgroundColor
+        scrollView.backgroundColor = DocumentTheme.backgroundColor
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
@@ -32,7 +32,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
 
         textView.frame = scrollView.contentView.bounds
         textView.drawsBackground = true
-        textView.backgroundColor = .textBackgroundColor
+        textView.backgroundColor = DocumentTheme.backgroundColor
         textView.delegate = self
 
         let rootView = NSView()

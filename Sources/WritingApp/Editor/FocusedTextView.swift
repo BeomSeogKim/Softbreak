@@ -6,28 +6,11 @@ import AppKit
 /// paragraph focus can never alter the Markdown source of truth.
 @MainActor
 final class FocusedTextView: NSTextView {
-    private enum Metrics {
-        static let maximumLineWidth: CGFloat = 700
-        static let minimumHorizontalInset: CGFloat = 32
-        static let minimumVerticalInset: CGFloat = 64
-        static let typewriterPosition: CGFloat = 0.42
-    }
-
     private let contentStorage: NSTextContentStorage
     private let modernLayoutManager: NSTextLayoutManager
     private var focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
     private var isApplyingPresentationAttributes = false
     private var lastAppliedInset = NSSize(width: -1, height: -1)
-
-    private static let editorFont = NSFont.monospacedSystemFont(ofSize: 16, weight: .regular)
-
-    private static let paragraphStyle: NSParagraphStyle = {
-        let style = NSMutableParagraphStyle()
-        style.lineSpacing = 7
-        style.paragraphSpacing = 2
-        style.lineBreakMode = .byWordWrapping
-        return style
-    }()
 
     init() {
         let contentStorage = NSTextContentStorage()
@@ -61,8 +44,9 @@ final class FocusedTextView: NSTextView {
             height: CGFloat.greatestFiniteMagnitude
         )
         autoresizingMask = [.width]
-        drawsBackground = false
-        insertionPointColor = .labelColor
+        drawsBackground = true
+        backgroundColor = DocumentTheme.backgroundColor
+        insertionPointColor = DocumentTheme.textColor
         selectedTextAttributes = [
             .backgroundColor: NSColor.selectedTextBackgroundColor,
             .foregroundColor: NSColor.selectedTextColor,
@@ -141,7 +125,11 @@ final class FocusedTextView: NSTextView {
             }
 
             if nextFocusedRange.length > 0 {
-                textStorage.addAttribute(.foregroundColor, value: NSColor.labelColor, range: nextFocusedRange)
+                textStorage.addAttribute(
+                    .foregroundColor,
+                    value: DocumentTheme.textColor,
+                    range: nextFocusedRange
+                )
             }
 
             textStorage.endEditing()
@@ -172,7 +160,8 @@ final class FocusedTextView: NSTextView {
         let editorRect = convert(windowRect, from: nil)
         let clipView = scrollView.contentView
         let maximumY = max(0, bounds.height - clipView.bounds.height)
-        let proposedY = editorRect.midY - (clipView.bounds.height * Metrics.typewriterPosition)
+        let proposedY = editorRect.midY
+            - (clipView.bounds.height * DocumentTheme.typewriterPosition)
         let targetY = min(maximumY, max(0, proposedY))
 
         guard abs(clipView.bounds.origin.y - targetY) > 0.5 else { return }
@@ -188,24 +177,99 @@ final class FocusedTextView: NSTextView {
         updateTextContainerInsetIfNeeded()
     }
 
+    @objc func setHeading(_ sender: Any?) {
+        let level = (sender as? NSMenuItem)?.tag ?? 0
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.heading(level: level, source: source, selection: selection)
+        }
+    }
+
+    @objc func promoteHeading(_ sender: Any?) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.adjustHeading(
+                promoting: true,
+                source: source,
+                selection: selection
+            )
+        }
+    }
+
+    @objc func demoteHeading(_ sender: Any?) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.adjustHeading(
+                promoting: false,
+                source: source,
+                selection: selection
+            )
+        }
+    }
+
+    @objc func toggleBold(_ sender: Any?) {
+        toggleInline(prefix: "**")
+    }
+
+    @objc func toggleItalic(_ sender: Any?) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.toggleItalic(source: source, selection: selection)
+        }
+    }
+
+    @objc func toggleStrikethrough(_ sender: Any?) {
+        toggleInline(prefix: "~~")
+    }
+
+    @objc func toggleInlineCode(_ sender: Any?) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.toggleInlineCode(source: source, selection: selection)
+        }
+    }
+
+    @objc func insertLink(_ sender: Any?) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.link(source: source, selection: selection)
+        }
+    }
+
+    @objc func toggleBlockQuote(_ sender: Any?) {
+        toggleBlock(.quote)
+    }
+
+    @objc func toggleUnorderedList(_ sender: Any?) {
+        toggleBlock(.unorderedList)
+    }
+
+    @objc func toggleOrderedList(_ sender: Any?) {
+        toggleBlock(.orderedList)
+    }
+
+    @objc func toggleTaskList(_ sender: Any?) {
+        toggleBlock(.taskList)
+    }
+
+    @objc func toggleCodeBlock(_ sender: Any?) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.fencedCode(source: source, selection: selection)
+        }
+    }
+
     private var dimmedTextColor: NSColor {
         let alpha: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 0.58 : 0.32
-        return NSColor.labelColor.withAlphaComponent(alpha)
+        return DocumentTheme.textColor.withAlphaComponent(alpha)
     }
 
     private var focusedAttributes: [NSAttributedString.Key: Any] {
         [
-            .font: Self.editorFont,
-            .foregroundColor: NSColor.labelColor,
-            .paragraphStyle: Self.paragraphStyle,
+            .font: DocumentTheme.bodyFont,
+            .foregroundColor: DocumentTheme.textColor,
+            .paragraphStyle: DocumentTheme.paragraphStyle,
         ]
     }
 
     private var dimmedAttributes: [NSAttributedString.Key: Any] {
         [
-            .font: Self.editorFont,
+            .font: DocumentTheme.bodyFont,
             .foregroundColor: dimmedTextColor,
-            .paragraphStyle: Self.paragraphStyle,
+            .paragraphStyle: DocumentTheme.paragraphStyle,
         ]
     }
 
@@ -214,12 +278,12 @@ final class FocusedTextView: NSTextView {
 
         let viewportSize = scrollView.contentView.bounds.size
         let horizontalInset = max(
-            Metrics.minimumHorizontalInset,
-            floor((viewportSize.width - Metrics.maximumLineWidth) / 2)
+            DocumentTheme.minimumHorizontalInset,
+            floor((viewportSize.width - DocumentTheme.maximumLineWidth) / 2)
         )
         let verticalInset = max(
-            Metrics.minimumVerticalInset,
-            floor(viewportSize.height * Metrics.typewriterPosition)
+            DocumentTheme.minimumVerticalInset,
+            floor(viewportSize.height * DocumentTheme.typewriterPosition)
         )
         let proposedInset = NSSize(width: horizontalInset, height: verticalInset)
 
@@ -234,6 +298,10 @@ final class FocusedTextView: NSTextView {
     private func restyleForCurrentAppearance() {
         guard let textStorage else { return }
 
+        backgroundColor = DocumentTheme.backgroundColor
+        insertionPointColor = DocumentTheme.textColor
+        enclosingScrollView?.backgroundColor = DocumentTheme.backgroundColor
+
         withoutUndoRegistration {
             isApplyingPresentationAttributes = true
             defer { isApplyingPresentationAttributes = false }
@@ -245,6 +313,38 @@ final class FocusedTextView: NSTextView {
             focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
         }
         applyParagraphFocus()
+    }
+
+    private func toggleInline(prefix: String) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.toggleInline(
+                prefix: prefix,
+                source: source,
+                selection: selection
+            )
+        }
+    }
+
+    private func toggleBlock(_ style: MarkdownFormatting.BlockStyle) {
+        performMarkdownEdit { source, selection in
+            MarkdownFormatting.block(style, source: source, selection: selection)
+        }
+    }
+
+    private func performMarkdownEdit(
+        _ makeEdit: (String, NSRange) -> MarkdownEdit?
+    ) {
+        guard isEditable else { return }
+
+        if hasMarkedText() {
+            unmarkText()
+        }
+        guard let edit = makeEdit(string, selectedRange()) else { return }
+
+        breakUndoCoalescing()
+        insertText(edit.replacement, replacementRange: edit.replacementRange)
+        setSelectedRange(edit.selectionAfter)
+        breakUndoCoalescing()
     }
 
     private func paragraphRange(for proposedRange: NSRange, in source: NSString) -> NSRange {

@@ -1,11 +1,11 @@
 import AppKit
+import UniformTypeIdentifiers
 
 @MainActor
 final class EditorWindowController: NSWindowController, NSWindowDelegate, NSToolbarDelegate, NSMenuItemValidation {
     private enum Mode: Int {
         case write
         case read
-        case pdf
     }
 
     private struct PDFRequest: Equatable {
@@ -25,10 +25,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private weak var exportToolbarItem: NSToolbarItem?
     private var mode = Mode.write
-    private var lastGeneratedMarkdown: String?
-    private var lastGeneratedBaseURL: URL?
-    private var exportAfterPDFGeneration = false
     private var activePDFRequest: PDFRequest?
+    private var pendingPDFDestination: URL?
+    private var isChoosingPDFDestination = false {
+        didSet { updateExportAvailability() }
+    }
     private var isGeneratingPDF = false {
         didSet {
             progressIndicator.isHidden = !isGeneratingPDF
@@ -37,8 +38,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             } else {
                 progressIndicator.stopAnimation(nil)
             }
-            exportToolbarItem?.isEnabled = !isGeneratingPDF
+            updateExportAvailability()
         }
+    }
+
+    private var exportIsBusy: Bool {
+        isChoosingPDFDestination || isGeneratingPDF
     }
 
     init(document: WritingDocument) {
@@ -46,7 +51,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         self.previewController = previewController
         self.writingDocument = document
         self.modeControl = NSSegmentedControl(
-            labels: ["Write", "Read", "PDF"],
+            labels: ["Write", "Read"],
             trackingMode: .selectOne,
             target: nil,
             action: nil
@@ -119,24 +124,30 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         setMode(.read)
     }
 
-    @objc func showPDFMode(_ sender: Any?) {
-        setMode(.pdf)
+    @objc func toggleReadMode(_ sender: Any?) {
+        setMode(mode == .read ? .write : .read)
     }
 
     @objc func exportPDF(_ sender: Any?) {
-        guard let document = writingDocument, let window else { return }
+        guard !exportIsBusy, let document = writingDocument, let window else { return }
 
-        let baseURL = document.fileURL?.deletingLastPathComponent()
-        let cachedPDFIsCurrent = previewController.cachedPDFURL != nil
-            && lastGeneratedMarkdown == document.markdown
-            && lastGeneratedBaseURL == baseURL
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.canCreateDirectories = true
+        let documentName = document.fileURL?.deletingPathExtension().lastPathComponent
+        panel.nameFieldStringValue = "\(documentName ?? "Document").pdf"
 
-        if cachedPDFIsCurrent, !isGeneratingPDF {
-            previewController.exportCachedPDF(from: window)
-            return
+        isChoosingPDFDestination = true
+        panel.beginSheetModal(for: window) { [weak self] response in
+            Task { @MainActor in
+                guard let self else { return }
+                self.isChoosingPDFDestination = false
+                guard response == .OK, let destinationURL = panel.url else { return }
+
+                self.pendingPDFDestination = destinationURL
+                self.generatePDF()
+            }
         }
-
-        setMode(.pdf, exportWhenReady: true)
     }
 
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -147,11 +158,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case #selector(showReadMode(_:)):
             menuItem.state = mode == .read ? .on : .off
             return true
-        case #selector(showPDFMode(_:)):
-            menuItem.state = mode == .pdf ? .on : .off
+        case #selector(toggleReadMode(_:)):
+            menuItem.state = mode == .read ? .on : .off
             return true
         case #selector(exportPDF(_:)):
-            return !isGeneratingPDF
+            return !exportIsBusy
         default:
             return true
         }
@@ -184,7 +195,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = "Document Mode"
             item.paletteLabel = "Document Mode"
-            item.toolTip = "Switch between writing, reading, and the actual PDF"
+            item.toolTip = "Switch between source writing and rendered reading"
             item.view = modeControl
             return item
 
@@ -192,11 +203,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             let item = NSToolbarItem(itemIdentifier: itemIdentifier)
             item.label = "Export PDF"
             item.paletteLabel = "Export PDF"
-            item.toolTip = "Export the PDF shown in preview"
+            item.toolTip = "Generate and export an A4 PDF"
             item.image = NSImage(systemSymbolName: "square.and.arrow.down", accessibilityDescription: "Export PDF")
             item.target = self
             item.action = #selector(exportPDF(_:))
-            item.isEnabled = !isGeneratingPDF
+            item.isEnabled = !exportIsBusy
             exportToolbarItem = item
             return item
 
@@ -207,26 +218,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private func configureContentViews() {
         let rootView = NSView()
-        rootView.wantsLayer = true
-        rootView.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
         rootViewController.view = rootView
 
         addChildView(editorViewController.view, to: rootView)
         addChildView(previewController.readView, to: rootView)
-        addChildView(previewController.pdfView, to: rootView)
 
         previewController.readView.isHidden = true
-        previewController.pdfView.isHidden = true
 
         progressIndicator.style = .spinning
-        progressIndicator.controlSize = .regular
+        progressIndicator.controlSize = .small
         progressIndicator.isDisplayedWhenStopped = false
         progressIndicator.isHidden = true
         rootView.addSubview(progressIndicator)
         progressIndicator.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
-            progressIndicator.centerXAnchor.constraint(equalTo: rootView.centerXAnchor),
-            progressIndicator.centerYAnchor.constraint(equalTo: rootView.centerYAnchor),
+            progressIndicator.trailingAnchor.constraint(equalTo: rootView.trailingAnchor, constant: -20),
+            progressIndicator.bottomAnchor.constraint(equalTo: rootView.bottomAnchor, constant: -20),
         ])
 
         window?.contentViewController = rootViewController
@@ -238,7 +245,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         modeControl.target = self
         modeControl.action = #selector(modeControlChanged(_:))
         modeControl.setAccessibilityLabel("Document mode")
-        modeControl.widthAnchor.constraint(equalToConstant: 210).isActive = true
+        modeControl.widthAnchor.constraint(equalToConstant: 150).isActive = true
 
         let toolbar = NSToolbar(identifier: "WritingApp.EditorToolbar")
         toolbar.delegate = self
@@ -266,7 +273,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         setMode(nextMode)
     }
 
-    private func setMode(_ nextMode: Mode, exportWhenReady: Bool = false) {
+    private func setMode(_ nextMode: Mode) {
         guard let document = writingDocument else { return }
 
         mode = nextMode
@@ -274,7 +281,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         editorViewController.view.isHidden = nextMode != .write
         previewController.readView.isHidden = nextMode != .read
-        previewController.pdfView.isHidden = nextMode != .pdf
 
         switch nextMode {
         case .write:
@@ -285,30 +291,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
                 markdown: document.markdown,
                 baseURL: document.fileURL?.deletingLastPathComponent()
             )
-
-        case .pdf:
-            generatePDF(exportWhenReady: exportWhenReady)
+            window?.makeFirstResponder(previewController.readView)
         }
     }
 
-    private func generatePDF(exportWhenReady: Bool) {
-        guard let document = writingDocument else { return }
-
-        exportAfterPDFGeneration = exportAfterPDFGeneration || exportWhenReady
+    private func generatePDF() {
+        guard let document = writingDocument, pendingPDFDestination != nil else { return }
         guard !isGeneratingPDF else { return }
 
         let request = PDFRequest(
             markdown: document.markdown,
             baseURL: document.fileURL?.deletingLastPathComponent()
         )
-        let cachedPDFIsCurrent = previewController.cachedPDFURL != nil
-            && lastGeneratedMarkdown == request.markdown
-            && lastGeneratedBaseURL == request.baseURL
-
-        if !cachedPDFIsCurrent {
-            previewController.clearDisplayedPDF()
-        }
-
         activePDFRequest = request
         isGeneratingPDF = true
 
@@ -321,31 +315,23 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self.activePDFRequest = nil
             self.isGeneratingPDF = false
             let latestRequest = self.currentPDFRequest
-            let shouldExport = self.exportAfterPDFGeneration
-
-            if case .success = result {
-                self.lastGeneratedMarkdown = request.markdown
-                self.lastGeneratedBaseURL = request.baseURL
-            }
 
             if latestRequest != request {
-                if self.mode == .pdf || shouldExport {
-                    self.generatePDF(exportWhenReady: shouldExport)
-                } else {
-                    self.exportAfterPDFGeneration = false
-                }
+                self.generatePDF()
                 return
             }
 
             switch result {
             case .success:
-                self.exportAfterPDFGeneration = false
-                if shouldExport, let window = self.window {
-                    self.previewController.exportCachedPDF(from: window)
+                guard let destinationURL = self.pendingPDFDestination else { return }
+                self.pendingPDFDestination = nil
+                do {
+                    try self.previewController.writeGeneratedPDF(to: destinationURL)
+                } catch {
+                    self.presentPDFError(error)
                 }
             case .failure(let error):
-                self.exportAfterPDFGeneration = false
-                self.previewController.clearDisplayedPDF()
+                self.pendingPDFDestination = nil
                 self.presentPDFError(error)
             }
         }
@@ -364,8 +350,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         guard let window else { return }
 
         let alert = NSAlert(error: error)
-        alert.messageText = "The PDF could not be prepared"
-        alert.informativeText = "Your Markdown is unchanged. Try opening PDF preview again."
+        alert.messageText = "The PDF could not be exported"
+        alert.informativeText = "Your Markdown is unchanged. Try exporting again."
         alert.beginSheetModal(for: window)
     }
 
@@ -381,8 +367,6 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
                 markdown: document.markdown,
                 baseURL: document.fileURL?.deletingLastPathComponent()
             )
-        case .pdf:
-            generatePDF(exportWhenReady: false)
         }
     }
 
@@ -397,8 +381,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
                 markdown: document.markdown,
                 baseURL: document.fileURL?.deletingLastPathComponent()
             )
-        case .pdf:
-            generatePDF(exportWhenReady: false)
         }
+    }
+
+    private func updateExportAvailability() {
+        exportToolbarItem?.isEnabled = !exportIsBusy
     }
 }

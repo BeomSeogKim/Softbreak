@@ -3,6 +3,11 @@ import XCTest
 @testable import WritingApp
 
 final class MarkdownHTMLRendererTests: XCTestCase {
+    func testRendererIsSendable() {
+        func requireSendable<T: Sendable>(_: T.Type) {}
+        requireSendable(MarkdownHTMLRenderer.self)
+    }
+
     func testRendersACompleteDocumentAndCommonMarkdown() {
         let renderer = MarkdownHTMLRenderer(css: "body { color: #222; }")
         let markdown = """

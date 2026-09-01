@@ -24,6 +24,7 @@ enum MainMenuFactory {
             titled: "File"
         )
         mainMenu.addSubmenu(makeEditMenu(), titled: "Edit")
+        mainMenu.addSubmenu(makeFormatMenu(), titled: "Format")
         mainMenu.addSubmenu(makeViewMenu(), titled: "View")
 
         let windowMenu = makeWindowMenu(application: application)
@@ -273,27 +274,136 @@ enum MainMenuFactory {
         return menu
     }
 
+    private static func makeFormatMenu() -> NSMenu {
+        let menu = NSMenu(title: "Format")
+
+        let paragraph = item(
+            titled: "Paragraph",
+            action: #selector(FocusedTextView.setHeading(_:)),
+            keyEquivalent: "0"
+        )
+        paragraph.tag = 0
+        menu.addItem(paragraph)
+
+        let headingMenu = NSMenu(title: "Heading")
+        for level in 1...6 {
+            let heading = item(
+                titled: "Heading \(level)",
+                action: #selector(FocusedTextView.setHeading(_:)),
+                keyEquivalent: String(level)
+            )
+            heading.tag = level
+            headingMenu.addItem(heading)
+        }
+        let headingItem = item(titled: "Heading")
+        menu.addItem(headingItem)
+        menu.setSubmenu(headingMenu, for: headingItem)
+
+        menu.addItem(
+            item(
+                titled: "Promote Heading",
+                action: #selector(FocusedTextView.promoteHeading(_:)),
+                keyEquivalent: "="
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Demote Heading",
+                action: #selector(FocusedTextView.demoteHeading(_:)),
+                keyEquivalent: "-"
+            )
+        )
+
+        menu.addItem(.separator())
+        menu.addItem(
+            item(
+                titled: "Bold",
+                action: #selector(FocusedTextView.toggleBold(_:)),
+                keyEquivalent: "b"
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Italic",
+                action: #selector(FocusedTextView.toggleItalic(_:)),
+                keyEquivalent: "i"
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Strikethrough",
+                action: #selector(FocusedTextView.toggleStrikethrough(_:)),
+                keyEquivalent: "u",
+                modifiers: [.command, .option]
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Inline Code",
+                action: #selector(FocusedTextView.toggleInlineCode(_:)),
+                keyEquivalent: "j"
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Link",
+                action: #selector(FocusedTextView.insertLink(_:)),
+                keyEquivalent: "k"
+            )
+        )
+
+        menu.addItem(.separator())
+        menu.addItem(
+            item(
+                titled: "Block Quote",
+                action: #selector(FocusedTextView.toggleBlockQuote(_:)),
+                keyEquivalent: "q",
+                modifiers: [.command, .option]
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Bulleted List",
+                action: #selector(FocusedTextView.toggleUnorderedList(_:)),
+                keyEquivalent: "8",
+                modifiers: [.command, .shift]
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Numbered List",
+                action: #selector(FocusedTextView.toggleOrderedList(_:)),
+                keyEquivalent: "7",
+                modifiers: [.command, .shift]
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Task List",
+                action: #selector(FocusedTextView.toggleTaskList(_:)),
+                keyEquivalent: "l",
+                modifiers: [.command, .option]
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Code Block",
+                action: #selector(FocusedTextView.toggleCodeBlock(_:)),
+                keyEquivalent: "j",
+                modifiers: [.command, .shift]
+            )
+        )
+
+        return menu
+    }
+
     private static func makeViewMenu() -> NSMenu {
         let menu = NSMenu(title: "View")
         menu.addItem(
             item(
-                titled: "Write",
-                action: #selector(EditorWindowController.showWriteMode(_:)),
-                keyEquivalent: "1"
-            )
-        )
-        menu.addItem(
-            item(
-                titled: "Read",
-                action: #selector(EditorWindowController.showReadMode(_:)),
-                keyEquivalent: "2"
-            )
-        )
-        menu.addItem(
-            item(
-                titled: "PDF Preview",
-                action: #selector(EditorWindowController.showPDFMode(_:)),
-                keyEquivalent: "3"
+                titled: "Toggle Read View",
+                action: #selector(EditorWindowController.toggleReadMode(_:)),
+                keyEquivalent: "r"
             )
         )
         menu.addItem(.separator())

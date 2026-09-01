@@ -4,7 +4,7 @@ A macOS-first Markdown editor for staying with the writing and taking the same t
 
 ## Product promise
 
-Open a normal Markdown file, write without interface noise, and export the PDF you already inspected.
+Open a normal Markdown file, write without interface noise, read it in the same visual environment, and export a dependable PDF only when needed.
 
 The editor keeps Markdown as plain text. It does not require an account, library, proprietary document format, or cloud service.
 
@@ -12,21 +12,21 @@ The editor keeps Markdown as plain text. It does not require an account, library
 
 - Native macOS document open, create, save, autosave, undo, and redo
 - A centered writing column with paragraph focus and typewriter scrolling
-- Standard Markdown source editing with restrained syntax styling
-- A read preview rendered from the document's Markdown
-- A real A4 PDF preview and export of that exact artifact
+- Standard Markdown formatting commands in the menu and responder chain
+- A rendered Read view using the same colors, body font, measure, and vertical rhythm as Write
+- Direct A4 PDF export with no separate PDF screen
 
 The first slice deliberately excludes accounts, sync, collaboration, AI writing, plugins, document databases, publishing, mobile platforms, and theme marketplaces.
 
 ## Technology direction
 
-The typing surface is AppKit `NSTextView` with TextKit 2. Markdown is parsed away from the typing path and rendered to safe HTML. WebKit owns both the read view and print layout; PDFKit displays the generated PDF before export.
+The typing surface is AppKit `NSTextView` with TextKit 2. Pure UTF-16-aware transforms implement Markdown formatting without introducing rich-text state. Markdown is parsed away from the typing path and rendered to safe HTML. WebKit owns both the Read view and the hidden print layout; PDFKit validates the generated PDF before it is written.
 
 The working product and benchmark decisions are recorded in [`notes/IDEATION.md`](notes/IDEATION.md).
 
 ## Status
 
-Discovery is complete. The first native vertical slice is implemented and available as a local, ad-hoc-signed macOS app.
+Discovery and the first interaction review are complete. The native slice is implemented and available as a local, ad-hoc-signed macOS app.
 
 ## Build and run
 
@@ -42,9 +42,11 @@ The packaging script creates a standard `.app` bundle, copies the shared documen
 
 ## Writing flow
 
-- `Command-1`: source-first Write view with paragraph focus and typewriter scrolling
-- `Command-2`: rendered Read view
-- `Command-3`: actual A4 PDF preview
-- `Shift-Command-E`: export the exact PDF artifact shown in preview
+- `Command-0`: paragraph; `Command-1` through `Command-6`: headings
+- `Command-B`, `Command-I`, `Command-K`: bold, italic, and link
+- `Command-J`, `Shift-Command-J`, `Option-Command-U`: inline code, code block, and strikethrough
+- `Option-Command-Q`, `Shift-Command-8`, `Shift-Command-7`, `Option-Command-L`: quote, bulleted list, numbered list, and task list
+- `Command-R`: toggle the visually matched Write and Read views
+- `Shift-Command-E`: choose a destination, generate the current document, and export an A4 PDF
 
 Standard macOS New, Open, Save, Save As, undo, redo, find, full screen, and recent-document commands are available from the menu bar.

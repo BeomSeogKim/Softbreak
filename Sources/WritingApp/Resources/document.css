@@ -1,21 +1,5 @@
-:root {
-  color-scheme: light dark;
-  font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
-  font-size: 18px;
-  line-height: 1.75;
-  color: #262522;
-  background: #fbfaf7;
-}
-
 * {
   box-sizing: border-box;
-}
-
-body {
-  max-width: 42rem;
-  margin: 0 auto;
-  padding: 5.5rem 3rem 8rem;
-  overflow-wrap: break-word;
 }
 
 h1,
@@ -50,7 +34,7 @@ ol,
 blockquote,
 pre,
 table {
-  margin: 0 0 1.35rem;
+  margin: 0 0 var(--document-block-gap);
 }
 
 ul,
@@ -123,11 +107,6 @@ img {
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    color: #e8e5df;
-    background: #1d1c1a;
-  }
-
   blockquote {
     color: #b8b2a8;
     border-color: #565149;
@@ -158,6 +137,7 @@ img {
   :root {
     color-scheme: light;
     font-size: 10.5pt;
+    --document-block-gap: 1.35rem;
     color: #171714;
     background: #fff;
   }

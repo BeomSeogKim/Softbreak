@@ -1,17 +1,33 @@
 import AppKit
 import Foundation
 import PDFKit
-import UniformTypeIdentifiers
 import WebKit
 
 @MainActor
 final class DocumentPreviewController: NSObject, WKNavigationDelegate {
+    private struct ReadRequest: Equatable, Sendable {
+        let markdown: String
+        let baseURL: URL?
+    }
+
+    private struct ActiveReadLoad {
+        let navigation: WKNavigation
+        let request: ReadRequest
+        let scrollY: Double?
+    }
+
     let readView: WKWebView
-    let pdfView: PDFView
-    private(set) var cachedPDFURL: URL?
+    private var cachedPDFURL: URL?
 
     private let printView: WKWebView
-    private let renderer: MarkdownHTMLRenderer
+    private let renderWorker: MarkdownRenderWorker
+    private var readRenderTask: Task<Void, Never>?
+    private var readRenderToken: UUID?
+    private var displayedReadRequest: ReadRequest?
+    private var pendingReadRequest: ReadRequest?
+    private var activeReadLoad: ActiveReadLoad?
+    private var pdfRenderTask: Task<Void, Never>?
+    private var pdfRenderToken: UUID?
     private var generationCompletion: ((Result<URL, Error>) -> Void)?
     private var activeNavigation: WKNavigation?
     private var isWaitingForPrintResources = false
@@ -24,28 +40,27 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 
     override init() {
         let css = Self.loadDocumentCSS()
-        renderer = MarkdownHTMLRenderer(css: css)
+        renderWorker = MarkdownRenderWorker(renderer: MarkdownHTMLRenderer(css: css))
         readView = WKWebView(frame: .zero, configuration: Self.makeWebConfiguration())
         printView = WKWebView(
             frame: NSRect(x: 0, y: 0, width: 794, height: 1_123),
             configuration: Self.makeWebConfiguration()
         )
-        pdfView = PDFView(frame: .zero)
 
         super.init()
 
         readView.allowsMagnification = true
+        readView.navigationDelegate = self
+        readView.underPageBackgroundColor = DocumentTheme.backgroundColor
 
         printView.navigationDelegate = self
         printView.mediaType = "print"
-
-        pdfView.autoScales = true
-        pdfView.displayDirection = .vertical
-        pdfView.displayMode = .singlePageContinuous
-        pdfView.displaysPageBreaks = true
     }
 
     deinit {
+        readRenderTask?.cancel()
+        pdfRenderTask?.cancel()
+
         if let cachedPDFURL {
             try? FileManager.default.removeItem(at: cachedPDFURL)
         }
@@ -60,11 +75,59 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     }
 
     func showReadPreview(markdown: String, baseURL: URL?) {
-        readView.loadHTMLString(renderer.render(markdown, baseURL: baseURL), baseURL: baseURL)
-    }
+        let request = ReadRequest(markdown: markdown, baseURL: baseURL)
+        if request == pendingReadRequest || request == activeReadLoad?.request {
+            return
+        }
 
-    func clearDisplayedPDF() {
-        pdfView.document = nil
+        if request == displayedReadRequest, activeReadLoad == nil {
+            cancelPendingReadRender()
+            return
+        }
+
+        readRenderTask?.cancel()
+        let inheritedScrollY = activeReadLoad?.scrollY
+        let shouldCaptureScroll = activeReadLoad == nil
+        if activeReadLoad != nil {
+            activeReadLoad = nil
+            readView.stopLoading()
+        }
+        let token = UUID()
+        let worker = renderWorker
+        readRenderToken = token
+        pendingReadRequest = request
+
+        readRenderTask = Task { @MainActor [weak self, worker] in
+            let scrollY: Double?
+            if let inheritedScrollY {
+                scrollY = inheritedScrollY
+            } else if shouldCaptureScroll {
+                scrollY = await self?.currentReadScrollY()
+            } else {
+                scrollY = nil
+            }
+            guard !Task.isCancelled else { return }
+            let html = await worker.render(markdown, baseURL: baseURL)
+            guard
+                !Task.isCancelled,
+                let self,
+                self.readRenderToken == token,
+                self.pendingReadRequest == request
+            else {
+                return
+            }
+
+            guard let navigation = self.readView.loadHTMLString(html, baseURL: baseURL) else {
+                self.cancelPendingReadRender()
+                return
+            }
+            self.activeReadLoad = ActiveReadLoad(
+                navigation: navigation,
+                request: request,
+                scrollY: scrollY
+            )
+            self.readRenderTask = nil
+        }
     }
 
     func generatePDF(
@@ -78,48 +141,50 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         }
 
         generationCompletion = completion
-        let html = renderer.render(markdown, baseURL: baseURL)
-        activeNavigation = printView.loadHTMLString(html, baseURL: baseURL)
-    }
-
-    func exportCachedPDF(from window: NSWindow) {
-        guard let cachedPDFURL else {
-            let alert = NSAlert()
-            alert.alertStyle = .informational
-            alert.messageText = "No PDF preview"
-            alert.informativeText = "Create a PDF preview before exporting."
-            alert.beginSheetModal(for: window)
-            return
-        }
-
-        let pdfBytes: Data
-        do {
-            pdfBytes = try Data(contentsOf: cachedPDFURL)
-        } catch {
-            let alert = NSAlert(error: error)
-            alert.beginSheetModal(for: window)
-            return
-        }
-
-        let panel = NSSavePanel()
-        panel.allowedContentTypes = [.pdf]
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "Document.pdf"
-        panel.beginSheetModal(for: window) { response in
-            guard response == .OK, let destinationURL = panel.url else {
+        let token = UUID()
+        let worker = renderWorker
+        pdfRenderToken = token
+        pdfRenderTask = Task { @MainActor [weak self, worker] in
+            let html = await worker.render(markdown, baseURL: baseURL)
+            guard
+                !Task.isCancelled,
+                let self,
+                self.pdfRenderToken == token,
+                self.generationCompletion != nil
+            else {
                 return
             }
 
-            do {
-                try pdfBytes.write(to: destinationURL, options: .atomic)
-            } catch {
-                let alert = NSAlert(error: error)
-                alert.beginSheetModal(for: window)
-            }
+            self.activeNavigation = self.printView.loadHTMLString(html, baseURL: baseURL)
+            self.pdfRenderTask = nil
         }
     }
 
+    func writeGeneratedPDF(to destinationURL: URL) throws {
+        guard let cachedPDFURL else {
+            throw DocumentPreviewError.missingGeneratedPDF
+        }
+
+        let bytes = try Data(contentsOf: cachedPDFURL)
+        try bytes.write(to: destinationURL, options: .atomic)
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        if webView === readView {
+            guard let load = activeReadLoad, navigation === load.navigation else { return }
+
+            displayedReadRequest = load.request
+            activeReadLoad = nil
+            if pendingReadRequest == load.request {
+                pendingReadRequest = nil
+                readRenderToken = nil
+            }
+            if let scrollY = load.scrollY {
+                restoreReadScrollY(scrollY)
+            }
+            return
+        }
+
         guard
             webView === printView,
             navigation === activeNavigation,
@@ -139,6 +204,12 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         didFail navigation: WKNavigation!,
         withError error: Error
     ) {
+        if webView === readView {
+            guard let load = activeReadLoad, navigation === load.navigation else { return }
+            failReadLoad(load)
+            return
+        }
+
         guard webView === printView, navigation === activeNavigation else {
             return
         }
@@ -151,6 +222,12 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         didFailProvisionalNavigation navigation: WKNavigation!,
         withError error: Error
     ) {
+        if webView === readView {
+            guard let load = activeReadLoad, navigation === load.navigation else { return }
+            failReadLoad(load)
+            return
+        }
+
         guard webView === printView, navigation === activeNavigation else {
             return
         }
@@ -159,11 +236,70 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     }
 
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        if webView === readView {
+            displayedReadRequest = nil
+            activeReadLoad = nil
+            cancelPendingReadRender()
+            return
+        }
+
         guard webView === printView, generationCompletion != nil else {
             return
         }
 
         finishGeneration(with: .failure(DocumentPreviewError.webContentProcessTerminated))
+    }
+
+    private func currentReadScrollY() async -> Double? {
+        guard displayedReadRequest != nil else { return nil }
+
+        return await withCheckedContinuation { continuation in
+            readView.callAsyncJavaScript(
+                "return window.scrollY;",
+                arguments: [:],
+                in: nil,
+                in: .defaultClient
+            ) { result in
+                switch result {
+                case .success(let value):
+                    continuation.resume(returning: (value as? NSNumber)?.doubleValue)
+                case .failure:
+                    continuation.resume(returning: nil)
+                }
+            }
+        }
+    }
+
+    private func restoreReadScrollY(_ scrollY: Double) {
+        readView.callAsyncJavaScript(
+            """
+            const maximumY = Math.max(
+              0,
+              document.documentElement.scrollHeight - window.innerHeight
+            );
+            window.scrollTo(0, Math.min(Math.max(0, requestedY), maximumY));
+            return window.scrollY;
+            """,
+            arguments: ["requestedY": scrollY],
+            in: nil,
+            in: .defaultClient
+        ) { _ in }
+    }
+
+    private func failReadLoad(_ load: ActiveReadLoad) {
+        guard activeReadLoad?.navigation === load.navigation else { return }
+
+        activeReadLoad = nil
+        if pendingReadRequest == load.request {
+            cancelPendingReadRender()
+        }
+    }
+
+    private func cancelPendingReadRender() {
+        pendingReadRequest = nil
+        readRenderToken = nil
+        readRenderTask?.cancel()
+        readRenderTask = nil
     }
 
     private func waitForPrintResources() {
@@ -217,7 +353,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     }
 
     private func createPDF() {
-        guard let window = readView.window ?? pdfView.window ?? NSApp.keyWindow ?? NSApp.mainWindow else {
+        guard let window = readView.window ?? NSApp.keyWindow ?? NSApp.mainWindow else {
             finishGeneration(with: .failure(DocumentPreviewError.missingPrintWindow))
             return
         }
@@ -299,7 +435,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
             let attributes = try? FileManager.default.attributesOfItem(atPath: outputURL.path),
             let byteCount = attributes[.size] as? NSNumber,
             byteCount.intValue > 0,
-            let document = PDFDocument(url: outputURL)
+            PDFDocument(url: outputURL) != nil
         else {
             try? FileManager.default.removeItem(at: outputURL)
             finishGeneration(with: .failure(DocumentPreviewError.invalidGeneratedPDF))
@@ -308,7 +444,6 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 
         let previousURL = cachedPDFURL
         cachedPDFURL = outputURL
-        pdfView.document = document
 
         if let previousURL, previousURL != outputURL {
             try? FileManager.default.removeItem(at: previousURL)
@@ -327,6 +462,9 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 
         let completion = generationCompletion
         generationCompletion = nil
+        pdfRenderTask?.cancel()
+        pdfRenderTask = nil
+        pdfRenderToken = nil
         activeNavigation = nil
         isWaitingForPrintResources = false
         resourceWaitToken = nil
@@ -356,7 +494,8 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         }
 
         do {
-            return try String(contentsOf: cssURL, encoding: .utf8)
+            let documentCSS = try String(contentsOf: cssURL, encoding: .utf8)
+            return DocumentTheme.screenCSS + "\n" + documentCSS
         } catch {
             preconditionFailure("Unable to read bundled document.css: \(error.localizedDescription)")
         }
@@ -387,8 +526,21 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         """
 }
 
+private actor MarkdownRenderWorker {
+    let renderer: MarkdownHTMLRenderer
+
+    init(renderer: MarkdownHTMLRenderer) {
+        self.renderer = renderer
+    }
+
+    func render(_ markdown: String, baseURL: URL?) -> String {
+        renderer.render(markdown, baseURL: baseURL)
+    }
+}
+
 private enum DocumentPreviewError: LocalizedError {
     case generationInProgress
+    case missingGeneratedPDF
     case resourceLoadTimedOut
     case webContentProcessTerminated
     case missingPrintWindow
@@ -398,13 +550,15 @@ private enum DocumentPreviewError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .generationInProgress:
-            "A PDF preview is already being created."
+            "A PDF export is already being created."
+        case .missingGeneratedPDF:
+            "The generated PDF is no longer available."
         case .resourceLoadTimedOut:
             "The document's fonts or images did not finish loading."
         case .webContentProcessTerminated:
             "The document renderer stopped before the PDF was ready."
         case .missingPrintWindow:
-            "A document window is required to create the PDF preview."
+            "A document window is required to export the PDF."
         case .printOperationFailed:
             "The PDF print operation did not complete."
         case .invalidGeneratedPDF:

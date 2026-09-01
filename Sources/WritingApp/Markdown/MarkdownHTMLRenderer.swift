@@ -1,7 +1,7 @@
 import Foundation
 import Markdown
 
-struct MarkdownHTMLRenderer {
+struct MarkdownHTMLRenderer: Sendable {
     private let css: String
 
     init(css: String) {
