@@ -13,6 +13,7 @@ This is a macOS-first Markdown editor experiment. Its primary value is helping a
 - Keep theme selection global and presentational. It must not rewrite Markdown, disturb selection or undo, or change the shared document measure and rhythm.
 - Keep Paragraph Focus and Typewriter Scrolling independent, global presentation preferences. Paragraph Focus starts on; Typewriter Scrolling starts off so an unset preference opens at the normal top writing position.
 - Keep common Markdown commands discoverable in the Format menu. `Command-0` through `Command-6`, `Command-B`, `Command-I`, and `Command-K` belong to document formatting, not view navigation.
+- Keep Return predictable in Markdown structures: continue indentation, quotes, bullets, ordered numbers, and tasks; reset a continued task to unchecked; exit an empty item; and leave Shift-Return to the native plain line break.
 - Record product questions, concepts, evidence, and decisions in `notes/IDEATION.md`.
 - Write project documentation, code, configuration, and comments in English. Communicate with the owner in Korean unless asked otherwise.
 - Manage future local secrets with sealbox using the project name `writing-app`; do not create a committed `.env` file.

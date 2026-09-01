@@ -47,6 +47,8 @@ The packaging script creates a standard `.app` bundle, copies the shared documen
 - `Command-B`, `Command-I`, `Command-K`: bold, italic, and link
 - `Command-J`, `Shift-Command-J`, `Option-Command-U`: inline code, code block, and strikethrough
 - `Option-Command-Q`, `Shift-Command-8`, `Shift-Command-7`, `Option-Command-L`: quote, bulleted list, numbered list, and task list
+- `Return`: continue indentation, quotes, bullets, ordered numbers, and tasks; use Return on an empty item to exit it
+- `Shift-Return`: insert a plain line break without continuing a Markdown prefix
 - `Command-R`: toggle the visually matched Write and Read views
 - `Shift-Command-E`: choose a destination, generate the current document, and export an A4 PDF
 - `View → Paragraph Focus`: dim everything outside the active paragraph; on by default

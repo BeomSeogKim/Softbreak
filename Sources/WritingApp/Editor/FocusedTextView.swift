@@ -219,6 +219,22 @@ final class FocusedTextView: NSTextView {
         updateTextContainerInsetIfNeeded()
     }
 
+    override func insertNewline(_ sender: Any?) {
+        let shiftIsPressed = NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+        guard !shiftIsPressed,
+              !hasMarkedText(),
+              let edit = MarkdownFormatting.continueLine(
+                  source: string,
+                  selection: selectedRange()
+              )
+        else {
+            super.insertNewline(sender)
+            return
+        }
+
+        applyMarkdownEdit(edit)
+    }
+
     @objc func setHeading(_ sender: Any?) {
         let level = (sender as? NSMenuItem)?.tag ?? 0
         performMarkdownEdit { source, selection in
@@ -388,6 +404,10 @@ final class FocusedTextView: NSTextView {
         }
         guard let edit = makeEdit(string, selectedRange()) else { return }
 
+        applyMarkdownEdit(edit)
+    }
+
+    private func applyMarkdownEdit(_ edit: MarkdownEdit) {
         breakUndoCoalescing()
         insertText(edit.replacement, replacementRange: edit.replacementRange)
         setSelectedRange(edit.selectionAfter)

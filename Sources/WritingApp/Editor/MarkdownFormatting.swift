@@ -468,6 +468,65 @@ enum MarkdownFormatting {
         }
     }
 
+    static func continueLine(source: String, selection: NSRange) -> MarkdownEdit? {
+        let sourceText = source as NSString
+        let safeSelection = clamped(selection, to: sourceText.length)
+        let currentLineRange = lineRange(
+            for: NSRange(location: safeSelection.location, length: 0),
+            in: sourceText
+        )
+        var contentEnd = NSMaxRange(currentLineRange)
+        while contentEnd > currentLineRange.location {
+            let character = sourceText.character(at: contentEnd - 1)
+            guard character == 10 || character == 13 else { break }
+            contentEnd -= 1
+        }
+
+        guard safeSelection.location >= currentLineRange.location,
+              NSMaxRange(safeSelection) <= contentEnd
+        else {
+            return nil
+        }
+
+        let lineBodyRange = NSRange(
+            location: currentLineRange.location,
+            length: contentEnd - currentLineRange.location
+        )
+        let lineBody = sourceText.substring(with: lineBodyRange)
+        guard let parsed = parseContinuationPrefix(in: lineBody) else { return nil }
+
+        let localSelectionStart = safeSelection.location - currentLineRange.location
+        guard localSelectionStart >= parsed.contentStart else { return nil }
+
+        let bodyText = lineBody as NSString
+        let content = bodyText.substring(from: parsed.contentStart)
+        if content.trimmingCharacters(in: .whitespaces).isEmpty {
+            let replacementRange = NSRange(
+                location: currentLineRange.location + parsed.exitRange.location,
+                length: parsed.exitRange.length
+            )
+            return MarkdownEdit(
+                replacementRange: replacementRange,
+                replacement: "",
+                selectionAfter: NSRange(location: replacementRange.location, length: 0)
+            )
+        }
+
+        let currentLine = sourceText.substring(with: currentLineRange) as NSString
+        let lineEnding = firstLineEnding(in: currentLine)
+            ?? firstLineEnding(in: sourceText)
+            ?? "\n"
+        let replacement = lineEnding + parsed.nextPrefix
+        return MarkdownEdit(
+            replacementRange: safeSelection,
+            replacement: replacement,
+            selectionAfter: NSRange(
+                location: safeSelection.location + (replacement as NSString).length,
+                length: 0
+            )
+        )
+    }
+
     static func fencedCode(source: String, selection: NSRange) -> MarkdownEdit? {
         let sourceText = source as NSString
         let safeSelection = clamped(selection, to: sourceText.length)
@@ -722,6 +781,12 @@ enum MarkdownFormatting {
         let style: BlockStyle?
     }
 
+    private struct ParsedContinuationPrefix {
+        let contentStart: Int
+        let nextPrefix: String
+        let exitRange: NSRange
+    }
+
     private static func transformLinePrefixes(
         source: String,
         selection: NSRange,
@@ -913,6 +978,159 @@ enum MarkdownFormatting {
             prefixLength: cursor,
             content: text.substring(from: cursor),
             style: style
+        )
+    }
+
+    private static func parseContinuationPrefix(
+        in line: String
+    ) -> ParsedContinuationPrefix? {
+        let text = line as NSString
+        let indentationEnd = leadingWhitespaceLength(in: text)
+        var cursor = indentationEnd
+        let quoteStart = cursor
+        var hasQuote = false
+
+        while cursor < text.length, text.character(at: cursor) == 62 {
+            hasQuote = true
+            cursor += 1
+            if cursor < text.length, isHorizontalWhitespace(text.character(at: cursor)) {
+                cursor += 1
+            }
+        }
+        if hasQuote {
+            while cursor < text.length, isHorizontalWhitespace(text.character(at: cursor)) {
+                cursor += 1
+            }
+        }
+
+        let baseEnd = cursor
+        let basePrefix = text.substring(with: NSRange(location: 0, length: baseEnd))
+        let listStart = cursor
+
+        if cursor < text.length, isBullet(text.character(at: cursor)) {
+            let marker = text.substring(with: NSRange(location: cursor, length: 1))
+            cursor += 1
+            guard cursor < text.length,
+                  isHorizontalWhitespace(text.character(at: cursor))
+            else {
+                return fallbackContinuation(
+                    in: text,
+                    indentationEnd: indentationEnd,
+                    quoteStart: quoteStart,
+                    baseEnd: baseEnd,
+                    basePrefix: basePrefix,
+                    hasQuote: hasQuote
+                )
+            }
+
+            let spacingStart = cursor
+            while cursor < text.length, isHorizontalWhitespace(text.character(at: cursor)) {
+                cursor += 1
+            }
+            let spacing = text.substring(
+                with: NSRange(location: spacingStart, length: cursor - spacingStart)
+            )
+            var nextPrefix = basePrefix + marker + spacing
+
+            if cursor + 2 < text.length,
+               text.character(at: cursor) == 91,
+               isTaskState(text.character(at: cursor + 1)),
+               text.character(at: cursor + 2) == 93 {
+                let taskEnd = cursor + 3
+                if taskEnd == text.length
+                    || isHorizontalWhitespace(text.character(at: taskEnd)) {
+                    cursor = taskEnd
+                    let taskSpacingStart = cursor
+                    while cursor < text.length,
+                          isHorizontalWhitespace(text.character(at: cursor)) {
+                        cursor += 1
+                    }
+                    let taskSpacing = taskSpacingStart == cursor
+                        ? " "
+                        : text.substring(
+                            with: NSRange(
+                                location: taskSpacingStart,
+                                length: cursor - taskSpacingStart
+                            )
+                        )
+                    nextPrefix += "[ ]" + taskSpacing
+                }
+            }
+
+            return ParsedContinuationPrefix(
+                contentStart: cursor,
+                nextPrefix: nextPrefix,
+                exitRange: NSRange(location: listStart, length: cursor - listStart)
+            )
+        }
+
+        if cursor < text.length, isDigit(text.character(at: cursor)) {
+            let numberStart = cursor
+            while cursor < text.length, isDigit(text.character(at: cursor)) {
+                cursor += 1
+            }
+            let numberEnd = cursor
+            if cursor < text.length,
+               text.character(at: cursor) == 46 || text.character(at: cursor) == 41 {
+                let delimiter = text.substring(with: NSRange(location: cursor, length: 1))
+                cursor += 1
+                if cursor < text.length,
+                   isHorizontalWhitespace(text.character(at: cursor)) {
+                    let spacingStart = cursor
+                    while cursor < text.length,
+                          isHorizontalWhitespace(text.character(at: cursor)) {
+                        cursor += 1
+                    }
+                    let number = text.substring(
+                        with: NSRange(location: numberStart, length: numberEnd - numberStart)
+                    )
+                    let spacing = text.substring(
+                        with: NSRange(location: spacingStart, length: cursor - spacingStart)
+                    )
+                    if let ordinal = Int(number), ordinal < Int.max {
+                        return ParsedContinuationPrefix(
+                            contentStart: cursor,
+                            nextPrefix: basePrefix + "\(ordinal + 1)" + delimiter + spacing,
+                            exitRange: NSRange(
+                                location: listStart,
+                                length: cursor - listStart
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        return fallbackContinuation(
+            in: text,
+            indentationEnd: indentationEnd,
+            quoteStart: quoteStart,
+            baseEnd: baseEnd,
+            basePrefix: basePrefix,
+            hasQuote: hasQuote
+        )
+    }
+
+    private static func fallbackContinuation(
+        in text: NSString,
+        indentationEnd: Int,
+        quoteStart: Int,
+        baseEnd: Int,
+        basePrefix: String,
+        hasQuote: Bool
+    ) -> ParsedContinuationPrefix? {
+        if hasQuote {
+            return ParsedContinuationPrefix(
+                contentStart: baseEnd,
+                nextPrefix: basePrefix,
+                exitRange: NSRange(location: quoteStart, length: baseEnd - quoteStart)
+            )
+        }
+        guard indentationEnd > 0 else { return nil }
+        return ParsedContinuationPrefix(
+            contentStart: indentationEnd,
+            nextPrefix: text.substring(to: indentationEnd),
+            exitRange: NSRange(location: 0, length: indentationEnd)
         )
     }
 

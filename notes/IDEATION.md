@@ -2,7 +2,7 @@
 
 ## Status
 
-Discovery and the first three feedback passes are complete. This file is the source of truth for product direction and benchmark evidence.
+Discovery and the first four feedback passes are complete. This file is the source of truth for product direction and benchmark evidence.
 
 ## Product definition
 
@@ -52,7 +52,7 @@ The continuity promise is precise: Write and Read share the selected background,
 5. **Focus:** Paragraph Focus and Typewriter Scrolling are independent global View preferences. Paragraph Focus starts on; Typewriter Scrolling starts off so new users begin at the normal top position. Both remember the last choice and change presentation only. Sentence focus can follow after Korean boundary behavior is tested.
 6. **Rendering:** One safe Markdown-to-HTML renderer and one selected theme for Read and print export. Write consumes the same background, body font, measure, and rhythm tokens.
 7. **PDF:** PDF is export-only. Ask for the destination first, generate a fresh A4 artifact from the current Markdown, relative-resource base, and selected theme, validate it, and write it atomically.
-8. **Keyboard contract:** `Command-0...6`, `Command-B`, `Command-I`, and `Command-K` follow the common Typora/iA Writer contract. Code, strikethrough, quote, bulleted/numbered/task lists, and heading level changes also live in Format so macOS App Shortcuts can remap them.
+8. **Keyboard contract:** `Command-0...6`, `Command-B`, `Command-I`, and `Command-K` follow the common Typora/iA Writer contract. Code, strikethrough, quote, bulleted/numbered/task lists, and heading level changes also live in Format so macOS App Shortcuts can remap them. Return continues indentation, quotes, unordered markers, incremented ordered markers, and unchecked tasks; Return on an empty item exits that level, while Shift-Return keeps the native plain line break.
 9. **Non-goals:** Accounts, cloud sync, collaboration, AI writing, plugins, knowledge graphs, publishing, mobile platforms, and a theme marketplace.
 10. **Themes:** Theme is a global presentation preference, not document metadata. Paper, Snow, and Sage are the light set; Ink, Midnight, and Pine are the dark set. All six preserve typography and layout, meet normal-text contrast, update every open window, and survive relaunch.
 
@@ -67,6 +67,7 @@ The continuity promise is precise: Write and Read share the selected background,
 - Shared screen tokens across Write and Read
 - A direct Theme menu with three light and three dark palettes, global persistence, and matching Write, Read, and PDF output
 - Independent Paragraph Focus and Typewriter Scrolling View toggles, with a top-starting default and persisted choices
+- Markdown-aware Return continuation for indentation, quotes, bullets, ordered lists, and tasks, including empty-item exit and a Shift-Return escape hatch
 
 ### Next candidates
 
