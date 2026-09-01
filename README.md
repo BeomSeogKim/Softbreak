@@ -41,7 +41,7 @@ brew install --cask beomseogkim/tap/softbreak
 
 The beta is ad-hoc signed because the project does not yet have an Apple Developer ID certificate. macOS therefore requires one explicit approval on first launch: try to open Softbreak, then go to **System Settings → Privacy & Security** and choose **Open Anyway**. Only do this after confirming that the download came from this repository's release.
 
-You can also download the DMG directly from [GitHub Releases](https://github.com/BeomSeogKim/Softbreak/releases/latest), open it, and drag `Softbreak.app` to `Applications`.
+You can also download the DMG directly from [GitHub Releases](https://github.com/BeomSeogKim/Softbreak/releases), open it, and drag `Softbreak.app` to `Applications`.
 
 ## Build and run
 
