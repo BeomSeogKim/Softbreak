@@ -13,8 +13,9 @@ The editor keeps Markdown as plain text. It does not require an account, library
 - Native macOS document open, create, save, autosave, undo, and redo
 - A centered writing column with paragraph focus and typewriter scrolling
 - Standard Markdown formatting commands in the menu and responder chain
-- A rendered Read view using the same colors, body font, measure, and vertical rhythm as Write
-- Direct A4 PDF export with no separate PDF screen
+- Three light themes and three dark themes shared by Write and Read
+- A rendered Read view using the selected colors and the same body font, measure, and vertical rhythm as Write
+- Direct A4 PDF export in the selected theme with no separate PDF screen
 
 The first slice deliberately excludes accounts, sync, collaboration, AI writing, plugins, document databases, publishing, mobile platforms, and theme marketplaces.
 
@@ -50,3 +51,7 @@ The packaging script creates a standard `.app` bundle, copies the shared documen
 - `Shift-Command-E`: choose a destination, generate the current document, and export an A4 PDF
 
 Standard macOS New, Open, Save, Save As, undo, redo, find, full screen, and recent-document commands are available from the menu bar.
+
+## Themes
+
+The top-level `Theme` menu offers Paper, Snow, and Sage for light writing, plus Ink, Midnight, and Pine for dark writing. The choice applies immediately to every open document, persists across launches, and changes presentation only: Markdown, selection, and undo history remain untouched.

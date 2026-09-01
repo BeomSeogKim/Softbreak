@@ -2,7 +2,7 @@
 
 ## Status
 
-Discovery and the first feedback pass are complete. This file is the source of truth for product direction and benchmark evidence.
+Discovery and the first two feedback passes are complete. This file is the source of truth for product direction and benchmark evidence.
 
 ## Product definition
 
@@ -16,7 +16,7 @@ Discovery and the first feedback pass are complete. This file is the source of t
 
 The interface should feel like paper while writing and like a dependable instrument when inspecting or exporting. Writing is the default state; tools appear only when asked for.
 
-The continuity promise is precise: Write and Read share the same background, body font, measure, and vertical rhythm. Read applies Markdown presentation; Write retains visible source. PDF reuses the Read renderer and is generated only during export.
+The continuity promise is precise: Write and Read share the selected background, body font, measure, and vertical rhythm. Read applies Markdown presentation; Write retains visible source. PDF reuses the Read renderer and selected theme, and is generated only during export.
 
 ## Benchmark observations
 
@@ -28,6 +28,7 @@ The continuity promise is precise: Write and Read share the same background, bod
 - Source Mode is separate from the default live preview, while PDF is an Export command rather than a document mode.
 - The default writing column and interface are quiet, although the file sidebar competes with the canvas until hidden.
 - Printing uses the standard macOS A4 print preview and includes a top-heading page-break option.
+- Six built-in CSS themes are exposed from a direct Theme menu; Typora can also remember separate choices for system Light and Dark appearances.
 - The strongest lesson is continuity between writing and reading. The main risk to avoid is making hidden syntax or inline rich editing the source of cursor, selection, undo, and Korean IME errors.
 
 ### iA Writer
@@ -36,6 +37,7 @@ The continuity promise is precise: Write and Read share the same background, bod
 - `Command-1` through `Command-6` are H1-H6, `Command-R` toggles Preview, and `Shift-Command-E` opens Export.
 - Sentence and paragraph focus, plus a separate typewriter option, are explicit and easy to discover.
 - Editor and Preview remain distinct states but retain the same application shell and selectable document template.
+- Application Light/Dark appearance is separate from Preview and PDF templates.
 - Export offers Markdown, HTML, PDF, Word, and project archive formats; PDF is a direct export choice.
 - Smart Lists continue list markers on Return, while Format exposes headings, lists, quote, inline styles, links, code blocks, tables, footnotes, content blocks, and page breaks.
 - An untitled test document was automatically placed in the configured iCloud library as a `.txt` file. The new app should instead make local file location and `.md` identity explicit.
@@ -48,10 +50,11 @@ The continuity promise is precise: Write and Read share the same background, bod
 3. **Typing surface:** AppKit `NSTextView` and TextKit 2. Keep the Markdown source as the only document truth.
 4. **Editing model:** Source-first. Syntax may be de-emphasized, but delimiters are not hidden in the first slice.
 5. **Focus:** Paragraph focus and typewriter scrolling ship in the first slice; sentence focus can follow after Korean boundary behavior is tested.
-6. **Rendering:** One safe Markdown-to-HTML renderer and one shared screen theme for Read and print export. Write consumes the same background, body font, measure, and rhythm tokens.
-7. **PDF:** PDF is export-only. Ask for the destination first, generate a fresh A4 artifact from the current Markdown and relative-resource base, validate it, and write it atomically.
+6. **Rendering:** One safe Markdown-to-HTML renderer and one selected theme for Read and print export. Write consumes the same background, body font, measure, and rhythm tokens.
+7. **PDF:** PDF is export-only. Ask for the destination first, generate a fresh A4 artifact from the current Markdown, relative-resource base, and selected theme, validate it, and write it atomically.
 8. **Keyboard contract:** `Command-0...6`, `Command-B`, `Command-I`, and `Command-K` follow the common Typora/iA Writer contract. Code, strikethrough, quote, bulleted/numbered/task lists, and heading level changes also live in Format so macOS App Shortcuts can remap them.
 9. **Non-goals:** Accounts, cloud sync, collaboration, AI writing, plugins, knowledge graphs, publishing, mobile platforms, and a theme marketplace.
+10. **Themes:** Theme is a global presentation preference, not document metadata. Paper, Snow, and Sage are the light set; Ink, Midnight, and Pine are the dark set. All six preserve typography and layout, meet normal-text contrast, update every open window, and survive relaunch.
 
 ## Feature audit and adoption order
 
@@ -62,6 +65,7 @@ The continuity promise is precise: Write and Read share the same background, bod
 - A discoverable Format menu backed by the current text view's responder chain and one-step undo
 - `Command-R` for Read and direct `Shift-Command-E` PDF export
 - Shared screen tokens across Write and Read
+- A direct Theme menu with three light and three dark palettes, global persistence, and matching Write, Read, and PDF output
 
 ### Next candidates
 
@@ -71,6 +75,7 @@ The continuity promise is precise: Write and Read share the same background, bod
 - Word count that fades out while typing
 - Outline and quick-open surfaces for longer document sets
 - Explicit page breaks and footnotes for PDF-oriented documents
+- An optional System appearance mode that remembers separate light and dark choices
 
 ### Deliberately later
 
@@ -80,8 +85,8 @@ The continuity promise is precise: Write and Read share the same background, bod
 
 Official references checked on 2026-09-01:
 
-- Typora: [Shortcut Keys](https://support.typora.io/Shortcut-Keys/), [Quick Start](https://support.typora.io/Quick-Start/), [Focus and Typewriter Mode](https://support.typora.io/Focus-and-Typewriter-Mode/), [Export](https://support.typora.io/Export/)
-- iA Writer: [Keyboard Shortcuts](https://ia.net/writer/support/basics/shortcuts?tab=keyboard-shortcuts-mac), [Focus Mode](https://ia.net/writer/support/editor/focus-mode), [Modify Preview](https://ia.net/writer/support/preview/modify-preview/modify-preview-mac), [Export, Share, Print](https://ia.net/writer/support/preview/export-share-print?tab=export-mac), [Smart Automation](https://ia.net/writer/support/editor/smart-automation/smart-automation-mac)
+- Typora: [Shortcut Keys](https://support.typora.io/Shortcut-Keys/), [Quick Start](https://support.typora.io/Quick-Start/), [Focus and Typewriter Mode](https://support.typora.io/Focus-and-Typewriter-Mode/), [About Themes](https://support.typora.io/About-Themes/), [Export](https://support.typora.io/Export/)
+- iA Writer: [Keyboard Shortcuts](https://ia.net/writer/support/basics/shortcuts?tab=keyboard-shortcuts-mac), [Settings](https://ia.net/writer/support/basics/settings?tab=settings-mac), [Focus Mode](https://ia.net/writer/support/editor/focus-mode), [Modify Preview](https://ia.net/writer/support/preview/modify-preview/modify-preview-mac), [Templates](https://ia.net/writer/support/preview/templates?tab=templates-mac), [Export, Share, Print](https://ia.net/writer/support/preview/export-share-print?tab=export-mac), [Smart Automation](https://ia.net/writer/support/editor/smart-automation/smart-automation-mac)
 
 ## Open questions after the first slice
 

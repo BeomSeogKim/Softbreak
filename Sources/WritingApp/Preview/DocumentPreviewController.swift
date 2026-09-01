@@ -1,18 +1,12 @@
 import AppKit
 import Foundation
-import PDFKit
 import WebKit
 
 @MainActor
 final class DocumentPreviewController: NSObject, WKNavigationDelegate {
-    private struct ReadRequest: Equatable, Sendable {
-        let markdown: String
-        let baseURL: URL?
-    }
-
     private struct ActiveReadLoad {
         let navigation: WKNavigation
-        let request: ReadRequest
+        let request: DocumentRenderRequest
         let scrollY: Double?
     }
 
@@ -21,13 +15,16 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 
     private let printView: WKWebView
     private let renderWorker: MarkdownRenderWorker
+    private let pageBackgroundRenderer = PDFPageBackgroundRenderer()
     private var readRenderTask: Task<Void, Never>?
     private var readRenderToken: UUID?
-    private var displayedReadRequest: ReadRequest?
-    private var pendingReadRequest: ReadRequest?
+    private var displayedReadRequest: DocumentRenderRequest?
+    private var pendingReadRequest: DocumentRenderRequest?
     private var activeReadLoad: ActiveReadLoad?
     private var pdfRenderTask: Task<Void, Never>?
+    private var pdfPostprocessingTask: Task<Void, Never>?
     private var pdfRenderToken: UUID?
+    private var activePDFTheme: DocumentTheme?
     private var generationCompletion: ((Result<URL, Error>) -> Void)?
     private var activeNavigation: WKNavigation?
     private var isWaitingForPrintResources = false
@@ -38,9 +35,8 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     private var pendingPDFURL: URL?
     private var abandonedPrintURLs: [ObjectIdentifier: URL] = [:]
 
-    override init() {
-        let css = Self.loadDocumentCSS()
-        renderWorker = MarkdownRenderWorker(renderer: MarkdownHTMLRenderer(css: css))
+    init(theme: DocumentTheme = .defaultTheme) {
+        renderWorker = MarkdownRenderWorker(documentCSS: Self.loadDocumentCSS())
         readView = WKWebView(frame: .zero, configuration: Self.makeWebConfiguration())
         printView = WKWebView(
             frame: NSRect(x: 0, y: 0, width: 794, height: 1_123),
@@ -51,15 +47,17 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 
         readView.allowsMagnification = true
         readView.navigationDelegate = self
-        readView.underPageBackgroundColor = DocumentTheme.backgroundColor
+        readView.underPageBackgroundColor = theme.backgroundColor
 
         printView.navigationDelegate = self
         printView.mediaType = "print"
+        printView.underPageBackgroundColor = theme.backgroundColor
     }
 
     deinit {
         readRenderTask?.cancel()
         pdfRenderTask?.cancel()
+        pdfPostprocessingTask?.cancel()
 
         if let cachedPDFURL {
             try? FileManager.default.removeItem(at: cachedPDFURL)
@@ -74,8 +72,13 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         }
     }
 
-    func showReadPreview(markdown: String, baseURL: URL?) {
-        let request = ReadRequest(markdown: markdown, baseURL: baseURL)
+    func showReadPreview(markdown: String, baseURL: URL?, theme: DocumentTheme) {
+        let request = DocumentRenderRequest(
+            markdown: markdown,
+            baseURL: baseURL,
+            theme: theme
+        )
+        readView.underPageBackgroundColor = theme.backgroundColor
         if request == pendingReadRequest || request == activeReadLoad?.request {
             return
         }
@@ -107,7 +110,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
                 scrollY = nil
             }
             guard !Task.isCancelled else { return }
-            let html = await worker.render(markdown, baseURL: baseURL)
+            let html = await worker.render(request)
             guard
                 !Task.isCancelled,
                 let self,
@@ -133,6 +136,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     func generatePDF(
         markdown: String,
         baseURL: URL?,
+        theme: DocumentTheme,
         completion: @escaping (Result<URL, Error>) -> Void
     ) {
         guard generationCompletion == nil else {
@@ -141,11 +145,18 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         }
 
         generationCompletion = completion
+        activePDFTheme = theme
+        let request = DocumentRenderRequest(
+            markdown: markdown,
+            baseURL: baseURL,
+            theme: theme
+        )
+        printView.underPageBackgroundColor = theme.backgroundColor
         let token = UUID()
         let worker = renderWorker
         pdfRenderToken = token
         pdfRenderTask = Task { @MainActor [weak self, worker] in
-            let html = await worker.render(markdown, baseURL: baseURL)
+            let html = await worker.render(request)
             guard
                 !Task.isCancelled,
                 let self,
@@ -243,7 +254,11 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
             return
         }
 
-        guard webView === printView, generationCompletion != nil else {
+        guard
+            webView === printView,
+            generationCompletion != nil,
+            pdfPostprocessingTask == nil
+        else {
             return
         }
 
@@ -431,25 +446,57 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
             return
         }
 
-        guard
-            let attributes = try? FileManager.default.attributesOfItem(atPath: outputURL.path),
-            let byteCount = attributes[.size] as? NSNumber,
-            byteCount.intValue > 0,
-            PDFDocument(url: outputURL) != nil
-        else {
+        guard let activePDFTheme, let pdfRenderToken else {
             try? FileManager.default.removeItem(at: outputURL)
-            finishGeneration(with: .failure(DocumentPreviewError.invalidGeneratedPDF))
+            finishGeneration(with: .failure(DocumentPreviewError.missingTheme))
             return
         }
 
-        let previousURL = cachedPDFURL
-        cachedPDFURL = outputURL
+        activeNavigation = nil
+        let renderer = pageBackgroundRenderer
+        pdfPostprocessingTask = Task { @MainActor [weak self, renderer] in
+            let result: Result<URL, Error>
+            do {
+                result = .success(try await renderer.render(
+                    sourceURL: outputURL,
+                    backgroundHex: activePDFTheme.palette.background
+                ))
+            } catch {
+                result = .failure(error)
+            }
+            try? FileManager.default.removeItem(at: outputURL)
 
-        if let previousURL, previousURL != outputURL {
+            guard
+                let self,
+                !Task.isCancelled,
+                self.pdfRenderToken == pdfRenderToken,
+                self.generationCompletion != nil
+            else {
+                if case .success(let themedOutputURL) = result {
+                    try? FileManager.default.removeItem(at: themedOutputURL)
+                }
+                return
+            }
+
+            self.pdfPostprocessingTask = nil
+            switch result {
+            case .success(let themedOutputURL):
+                self.finishThemedPDF(themedOutputURL)
+            case .failure(let error):
+                self.finishGeneration(with: .failure(error))
+            }
+        }
+    }
+
+    private func finishThemedPDF(_ themedOutputURL: URL) {
+        let previousURL = cachedPDFURL
+        cachedPDFURL = themedOutputURL
+
+        if let previousURL, previousURL != themedOutputURL {
             try? FileManager.default.removeItem(at: previousURL)
         }
 
-        finishGeneration(with: .success(outputURL))
+        finishGeneration(with: .success(themedOutputURL))
     }
 
     private func finishGeneration(with result: Result<URL, Error>) {
@@ -464,7 +511,10 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         generationCompletion = nil
         pdfRenderTask?.cancel()
         pdfRenderTask = nil
+        pdfPostprocessingTask?.cancel()
+        pdfPostprocessingTask = nil
         pdfRenderToken = nil
+        activePDFTheme = nil
         activeNavigation = nil
         isWaitingForPrintResources = false
         resourceWaitToken = nil
@@ -495,7 +545,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 
         do {
             let documentCSS = try String(contentsOf: cssURL, encoding: .utf8)
-            return DocumentTheme.screenCSS + "\n" + documentCSS
+            return documentCSS
         } catch {
             preconditionFailure("Unable to read bundled document.css: \(error.localizedDescription)")
         }
@@ -527,30 +577,34 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
 }
 
 private actor MarkdownRenderWorker {
-    let renderer: MarkdownHTMLRenderer
+    private let documentCSS: String
 
-    init(renderer: MarkdownHTMLRenderer) {
-        self.renderer = renderer
+    init(documentCSS: String) {
+        self.documentCSS = documentCSS
     }
 
-    func render(_ markdown: String, baseURL: URL?) -> String {
-        renderer.render(markdown, baseURL: baseURL)
+    func render(_ request: DocumentRenderRequest) -> String {
+        MarkdownHTMLRenderer(
+            css: request.theme.screenCSS + "\n" + documentCSS
+        ).render(request.markdown, baseURL: request.baseURL)
     }
 }
 
 private enum DocumentPreviewError: LocalizedError {
     case generationInProgress
+    case missingTheme
     case missingGeneratedPDF
     case resourceLoadTimedOut
     case webContentProcessTerminated
     case missingPrintWindow
     case printOperationFailed
-    case invalidGeneratedPDF
 
     var errorDescription: String? {
         switch self {
         case .generationInProgress:
             "A PDF export is already being created."
+        case .missingTheme:
+            "The selected document theme is no longer available."
         case .missingGeneratedPDF:
             "The generated PDF is no longer available."
         case .resourceLoadTimedOut:
@@ -561,8 +615,6 @@ private enum DocumentPreviewError: LocalizedError {
             "A document window is required to export the PDF."
         case .printOperationFailed:
             "The PDF print operation did not complete."
-        case .invalidGeneratedPDF:
-            "The generated PDF could not be opened."
         }
     }
 }

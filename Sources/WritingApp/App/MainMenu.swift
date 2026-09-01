@@ -5,7 +5,8 @@ enum MainMenuFactory {
     static func makeMainMenu(
         for application: NSApplication,
         documentController: MarkdownDocumentController,
-        recentDocumentsMenuCoordinator: RecentDocumentsMenuCoordinator
+        recentDocumentsMenuCoordinator: RecentDocumentsMenuCoordinator,
+        themeController: DocumentThemeController
     ) -> NSMenu {
         let applicationName = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleDisplayName"
@@ -26,6 +27,10 @@ enum MainMenuFactory {
         mainMenu.addSubmenu(makeEditMenu(), titled: "Edit")
         mainMenu.addSubmenu(makeFormatMenu(), titled: "Format")
         mainMenu.addSubmenu(makeViewMenu(), titled: "View")
+        mainMenu.addSubmenu(
+            makeThemeMenu(themeController: themeController),
+            titled: "Theme"
+        )
 
         let windowMenu = makeWindowMenu(application: application)
         mainMenu.addSubmenu(windowMenu, titled: "Window")
@@ -415,6 +420,49 @@ enum MainMenuFactory {
                 modifiers: [.command, .control]
             )
         )
+
+        return menu
+    }
+
+    static func makeThemeMenu(themeController: DocumentThemeController) -> NSMenu {
+        let menu = NSMenu(title: "Theme")
+
+        menu.addSubmenu(
+            makeThemeFamilyMenu(
+                titled: "Light",
+                themes: DocumentTheme.lightThemes,
+                themeController: themeController
+            ),
+            titled: "Light"
+        )
+        menu.addSubmenu(
+            makeThemeFamilyMenu(
+                titled: "Dark",
+                themes: DocumentTheme.darkThemes,
+                themeController: themeController
+            ),
+            titled: "Dark"
+        )
+
+        return menu
+    }
+
+    private static func makeThemeFamilyMenu(
+        titled title: String,
+        themes: [DocumentTheme],
+        themeController: DocumentThemeController
+    ) -> NSMenu {
+        let menu = NSMenu(title: title)
+
+        for theme in themes {
+            let themeItem = item(
+                titled: theme.displayName,
+                action: #selector(DocumentThemeController.selectTheme(_:)),
+                target: themeController
+            )
+            themeItem.representedObject = theme.rawValue
+            menu.addItem(themeItem)
+        }
 
         return menu
     }

@@ -8,11 +8,12 @@ import AppKit
 final class FocusedTextView: NSTextView {
     private let contentStorage: NSTextContentStorage
     private let modernLayoutManager: NSTextLayoutManager
+    private var theme: DocumentTheme
     private var focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
     private var isApplyingPresentationAttributes = false
     private var lastAppliedInset = NSSize(width: -1, height: -1)
 
-    init() {
+    init(theme: DocumentTheme = .defaultTheme) {
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
         let textContainer = NSTextContainer(
@@ -24,6 +25,7 @@ final class FocusedTextView: NSTextView {
 
         self.contentStorage = contentStorage
         self.modernLayoutManager = layoutManager
+        self.theme = theme
 
         super.init(frame: .zero, textContainer: textContainer)
 
@@ -45,8 +47,8 @@ final class FocusedTextView: NSTextView {
         )
         autoresizingMask = [.width]
         drawsBackground = true
-        backgroundColor = DocumentTheme.backgroundColor
-        insertionPointColor = DocumentTheme.textColor
+        backgroundColor = theme.backgroundColor
+        insertionPointColor = theme.textColor
         selectedTextAttributes = [
             .backgroundColor: NSColor.selectedTextBackgroundColor,
             .foregroundColor: NSColor.selectedTextColor,
@@ -75,7 +77,12 @@ final class FocusedTextView: NSTextView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        restyleForCurrentAppearance()
+        restyleForCurrentTheme()
+    }
+
+    func applyTheme(_ theme: DocumentTheme) {
+        self.theme = theme
+        restyleForCurrentTheme()
     }
 
     /// Replaces source text without registering an undo action or emitting a document edit.
@@ -127,7 +134,7 @@ final class FocusedTextView: NSTextView {
             if nextFocusedRange.length > 0 {
                 textStorage.addAttribute(
                     .foregroundColor,
-                    value: DocumentTheme.textColor,
+                    value: theme.textColor,
                     range: nextFocusedRange
                 )
             }
@@ -254,13 +261,13 @@ final class FocusedTextView: NSTextView {
 
     private var dimmedTextColor: NSColor {
         let alpha: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 0.58 : 0.32
-        return DocumentTheme.textColor.withAlphaComponent(alpha)
+        return theme.textColor.withAlphaComponent(alpha)
     }
 
     private var focusedAttributes: [NSAttributedString.Key: Any] {
         [
             .font: DocumentTheme.bodyFont,
-            .foregroundColor: DocumentTheme.textColor,
+            .foregroundColor: theme.textColor,
             .paragraphStyle: DocumentTheme.paragraphStyle,
         ]
     }
@@ -295,12 +302,12 @@ final class FocusedTextView: NSTextView {
         textContainerInset = proposedInset
     }
 
-    private func restyleForCurrentAppearance() {
+    private func restyleForCurrentTheme() {
         guard let textStorage else { return }
 
-        backgroundColor = DocumentTheme.backgroundColor
-        insertionPointColor = DocumentTheme.textColor
-        enclosingScrollView?.backgroundColor = DocumentTheme.backgroundColor
+        backgroundColor = theme.backgroundColor
+        insertionPointColor = theme.textColor
+        enclosingScrollView?.backgroundColor = theme.backgroundColor
 
         withoutUndoRegistration {
             isApplyingPresentationAttributes = true

@@ -4,6 +4,7 @@ import AppKit
 final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private var documentController: MarkdownDocumentController?
     private var recentDocumentsMenuCoordinator: RecentDocumentsMenuCoordinator?
+    private var themeController: DocumentThemeController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -15,15 +16,19 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
         let recentDocumentsMenuCoordinator = RecentDocumentsMenuCoordinator(
             documentController: documentController
         )
+        let themeController = DocumentThemeController()
 
         self.documentController = documentController
         self.recentDocumentsMenuCoordinator = recentDocumentsMenuCoordinator
+        self.themeController = themeController
 
         let application = notification.object as? NSApplication ?? NSApplication.shared
+        themeController.applyAppearance(to: application)
         application.mainMenu = MainMenuFactory.makeMainMenu(
             for: application,
             documentController: documentController,
-            recentDocumentsMenuCoordinator: recentDocumentsMenuCoordinator
+            recentDocumentsMenuCoordinator: recentDocumentsMenuCoordinator,
+            themeController: themeController
         )
     }
 

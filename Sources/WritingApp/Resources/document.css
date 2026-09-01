@@ -48,14 +48,14 @@ li + li {
 
 blockquote {
   padding-left: 1.1rem;
-  border-left: 0.2rem solid #c8c3b8;
-  color: #69655e;
+  border-left: 0.2rem solid var(--document-quote-border);
+  color: var(--document-muted-text);
 }
 
 code {
   padding: 0.12em 0.32em;
   border-radius: 0.3rem;
-  background: #eeeae2;
+  background: var(--document-surface);
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
   font-size: 0.88em;
 }
@@ -64,7 +64,7 @@ pre {
   padding: 1rem 1.1rem;
   overflow-x: auto;
   border-radius: 0.5rem;
-  background: #eeeae2;
+  background: var(--document-surface);
   break-inside: avoid-page;
 }
 
@@ -74,14 +74,14 @@ pre code {
 }
 
 a {
-  color: #315f86;
+  color: var(--document-link);
   text-underline-offset: 0.15em;
 }
 
 hr {
   margin: 3rem 0;
   border: 0;
-  border-top: 1px solid #d7d2c9;
+  border-top: 1px solid var(--document-border);
 }
 
 table {
@@ -93,7 +93,7 @@ table {
 th,
 td {
   padding: 0.45rem 0.6rem;
-  border-bottom: 1px solid #d7d2c9;
+  border-bottom: 1px solid var(--document-border);
   text-align: left;
   vertical-align: top;
 }
@@ -106,46 +106,16 @@ img {
   break-inside: avoid-page;
 }
 
-@media (prefers-color-scheme: dark) {
-  blockquote {
-    color: #b8b2a8;
-    border-color: #565149;
-  }
-
-  code,
-  pre {
-    background: #2a2824;
-  }
-
-  a {
-    color: #8bb8dc;
-  }
-
-  hr,
-  th,
-  td {
-    border-color: #47433d;
-  }
-}
-
 @page {
   size: A4 portrait;
   margin: 20mm 22mm 22mm;
 }
 
 @media print {
-  :root {
-    color-scheme: light;
-    font-size: 10.5pt;
-    --document-block-gap: 1.35rem;
-    color: #171714;
-    background: #fff;
-  }
-
   body {
     max-width: none;
     margin: 0;
-    padding: 0;
+    padding: 0 1mm;
   }
 
   h1,
@@ -161,23 +131,4 @@ img {
     break-inside: avoid-page;
   }
 
-  a {
-    color: inherit;
-  }
-
-  blockquote {
-    color: #69655e;
-    border-color: #c8c3b8;
-  }
-
-  code,
-  pre {
-    background: #eeeae2;
-  }
-
-  hr,
-  th,
-  td {
-    border-color: #d7d2c9;
-  }
 }

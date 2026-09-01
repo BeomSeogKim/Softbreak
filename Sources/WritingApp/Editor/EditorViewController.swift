@@ -2,12 +2,24 @@ import AppKit
 
 @MainActor
 final class EditorViewController: NSViewController, NSTextViewDelegate {
-    let textView = FocusedTextView()
+    let textView: FocusedTextView
 
     var onMarkdownChange: ((String) -> Void)?
 
+    private var theme: DocumentTheme
     private var pendingEditedRange: NSRange?
     private var isLoadingMarkdown = false
+
+    init(theme: DocumentTheme = .defaultTheme) {
+        self.theme = theme
+        self.textView = FocusedTextView(theme: theme)
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
 
     var markdown: String {
         get { textView.string }
@@ -23,7 +35,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
         let scrollView = NSScrollView()
         scrollView.borderType = .noBorder
         scrollView.drawsBackground = true
-        scrollView.backgroundColor = DocumentTheme.backgroundColor
+        scrollView.backgroundColor = theme.backgroundColor
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
@@ -32,7 +44,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
 
         textView.frame = scrollView.contentView.bounds
         textView.drawsBackground = true
-        textView.backgroundColor = DocumentTheme.backgroundColor
+        textView.backgroundColor = theme.backgroundColor
         textView.delegate = self
 
         let rootView = NSView()
@@ -62,6 +74,13 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
 
     func focusEditor() {
         view.window?.makeFirstResponder(textView)
+    }
+
+    func applyTheme(_ theme: DocumentTheme) {
+        self.theme = theme
+        if isViewLoaded {
+            textView.applyTheme(theme)
+        }
     }
 
     func textView(

@@ -8,24 +8,20 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case read
     }
 
-    private struct PDFRequest: Equatable {
-        let markdown: String
-        let baseURL: URL?
-    }
-
     private static let modeItemIdentifier = NSToolbarItem.Identifier("WritingApp.Mode")
     private static let exportItemIdentifier = NSToolbarItem.Identifier("WritingApp.ExportPDF")
 
     private weak var writingDocument: WritingDocument?
-    private let editorViewController = EditorViewController()
+    private let editorViewController: EditorViewController
     private let previewController: DocumentPreviewController
     private let rootViewController = NSViewController()
     private let modeControl: NSSegmentedControl
     private let progressIndicator = NSProgressIndicator()
 
     private weak var exportToolbarItem: NSToolbarItem?
+    private var theme: DocumentTheme
     private var mode = Mode.write
-    private var activePDFRequest: PDFRequest?
+    private var activePDFRequest: DocumentRenderRequest?
     private var pendingPDFDestination: URL?
     private var isChoosingPDFDestination = false {
         didSet { updateExportAvailability() }
@@ -47,7 +43,10 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     }
 
     init(document: WritingDocument) {
-        let previewController = DocumentPreviewController()
+        let theme = DocumentThemePreferences().selectedTheme
+        let previewController = DocumentPreviewController(theme: theme)
+        self.theme = theme
+        self.editorViewController = EditorViewController(theme: theme)
         self.previewController = previewController
         self.writingDocument = document
         self.modeControl = NSSegmentedControl(
@@ -67,6 +66,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .visible
         window.toolbarStyle = .unifiedCompact
+        window.appearance = theme.appearance
+        window.backgroundColor = theme.backgroundColor
         window.isReleasedWhenClosed = false
         window.setFrameAutosaveName("WritingApp.EditorWindow")
 
@@ -95,6 +96,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             selector: #selector(documentFileURLDidChange(_:)),
             name: .markdownDocumentDidChangeFileURL,
             object: document
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(documentThemeDidChange(_:)),
+            name: .documentThemeDidChange,
+            object: nil
         )
     }
 
@@ -289,7 +296,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .read:
             previewController.showReadPreview(
                 markdown: document.markdown,
-                baseURL: document.fileURL?.deletingLastPathComponent()
+                baseURL: document.fileURL?.deletingLastPathComponent(),
+                theme: theme
             )
             window?.makeFirstResponder(previewController.readView)
         }
@@ -299,16 +307,18 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         guard let document = writingDocument, pendingPDFDestination != nil else { return }
         guard !isGeneratingPDF else { return }
 
-        let request = PDFRequest(
+        let request = DocumentRenderRequest(
             markdown: document.markdown,
-            baseURL: document.fileURL?.deletingLastPathComponent()
+            baseURL: document.fileURL?.deletingLastPathComponent(),
+            theme: theme
         )
         activePDFRequest = request
         isGeneratingPDF = true
 
         previewController.generatePDF(
             markdown: request.markdown,
-            baseURL: request.baseURL
+            baseURL: request.baseURL,
+            theme: request.theme
         ) { [weak self] result in
             guard let self, self.activePDFRequest == request else { return }
 
@@ -337,12 +347,13 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         }
     }
 
-    private var currentPDFRequest: PDFRequest? {
+    private var currentPDFRequest: DocumentRenderRequest? {
         guard let document = writingDocument else { return nil }
 
-        return PDFRequest(
+        return DocumentRenderRequest(
             markdown: document.markdown,
-            baseURL: document.fileURL?.deletingLastPathComponent()
+            baseURL: document.fileURL?.deletingLastPathComponent(),
+            theme: theme
         )
     }
 
@@ -365,7 +376,8 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .read:
             previewController.showReadPreview(
                 markdown: document.markdown,
-                baseURL: document.fileURL?.deletingLastPathComponent()
+                baseURL: document.fileURL?.deletingLastPathComponent(),
+                theme: theme
             )
         }
     }
@@ -379,9 +391,31 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case .read:
             previewController.showReadPreview(
                 markdown: document.markdown,
-                baseURL: document.fileURL?.deletingLastPathComponent()
+                baseURL: document.fileURL?.deletingLastPathComponent(),
+                theme: theme
             )
         }
+    }
+
+    @objc private func documentThemeDidChange(_ notification: Notification) {
+        guard let nextTheme = notification.userInfo?[DocumentThemeController.notificationThemeKey]
+                as? DocumentTheme,
+              nextTheme != theme
+        else {
+            return
+        }
+
+        theme = nextTheme
+        window?.appearance = nextTheme.appearance
+        window?.backgroundColor = nextTheme.backgroundColor
+        editorViewController.applyTheme(nextTheme)
+
+        guard mode == .read, let document = writingDocument else { return }
+        previewController.showReadPreview(
+            markdown: document.markdown,
+            baseURL: document.fileURL?.deletingLastPathComponent(),
+            theme: nextTheme
+        )
     }
 
     private func updateExportAvailability() {

@@ -1,7 +1,29 @@
 import AppKit
 
-@MainActor
-enum DocumentTheme {
+enum DocumentTheme: String, CaseIterable, Sendable {
+    enum Family: String, Sendable {
+        case light
+        case dark
+    }
+
+    struct Palette: Equatable, Sendable {
+        let background: String
+        let text: String
+        let mutedText: String
+        let surface: String
+        let border: String
+        let quoteBorder: String
+        let link: String
+    }
+
+    case paper
+    case snow
+    case sage
+    case ink
+    case midnight
+    case pine
+
+    static let defaultTheme = DocumentTheme.paper
     static let maximumLineWidth: CGFloat = 700
     static let minimumHorizontalInset: CGFloat = 32
     static let minimumVerticalInset: CGFloat = 64
@@ -9,8 +31,10 @@ enum DocumentTheme {
     static let bodyFontSize: CGFloat = 18
     static let bodyLineHeight: CGFloat = 31.5
 
+    @MainActor
     static let bodyFont = NSFont.systemFont(ofSize: bodyFontSize, weight: .regular)
 
+    @MainActor
     static let paragraphStyle: NSParagraphStyle = {
         let style = NSMutableParagraphStyle()
         style.minimumLineHeight = bodyLineHeight
@@ -20,59 +44,182 @@ enum DocumentTheme {
         return style
     }()
 
-    static let backgroundColor = dynamicColor(
-        light: (0xFB, 0xFA, 0xF7),
-        dark: (0x1D, 0x1C, 0x1A)
-    )
-    static let textColor = dynamicColor(
-        light: (0x26, 0x25, 0x22),
-        dark: (0xE8, 0xE5, 0xDF)
-    )
+    static var lightThemes: [DocumentTheme] {
+        allCases.filter { $0.family == .light }
+    }
 
-    static var screenCSS: String {
-        """
+    static var darkThemes: [DocumentTheme] {
+        allCases.filter { $0.family == .dark }
+    }
+
+    var displayName: String {
+        switch self {
+        case .paper: "Paper"
+        case .snow: "Snow"
+        case .sage: "Sage"
+        case .ink: "Ink"
+        case .midnight: "Midnight"
+        case .pine: "Pine"
+        }
+    }
+
+    var family: Family {
+        switch self {
+        case .paper, .snow, .sage:
+            .light
+        case .ink, .midnight, .pine:
+            .dark
+        }
+    }
+
+    var palette: Palette {
+        switch self {
+        case .paper:
+            Palette(
+                background: "#FBFAF7",
+                text: "#262522",
+                mutedText: "#69655E",
+                surface: "#EEEAE2",
+                border: "#D7D2C9",
+                quoteBorder: "#C8C3B8",
+                link: "#315F86"
+            )
+        case .snow:
+            Palette(
+                background: "#FCFCFD",
+                text: "#202124",
+                mutedText: "#62666C",
+                surface: "#F1F3F5",
+                border: "#D9DDE2",
+                quoteBorder: "#C2C8D0",
+                link: "#285F9E"
+            )
+        case .sage:
+            Palette(
+                background: "#F5F8F3",
+                text: "#253027",
+                mutedText: "#59675D",
+                surface: "#E8EFE6",
+                border: "#CCD8CC",
+                quoteBorder: "#AABCAA",
+                link: "#3E6F56"
+            )
+        case .ink:
+            Palette(
+                background: "#1D1C1A",
+                text: "#E8E5DF",
+                mutedText: "#B8B2A8",
+                surface: "#2A2824",
+                border: "#47433D",
+                quoteBorder: "#565149",
+                link: "#8BB8DC"
+            )
+        case .midnight:
+            Palette(
+                background: "#171B24",
+                text: "#E7EAF0",
+                mutedText: "#AEB6C5",
+                surface: "#222936",
+                border: "#394355",
+                quoteBorder: "#53627A",
+                link: "#8CBEEE"
+            )
+        case .pine:
+            Palette(
+                background: "#18201D",
+                text: "#E4EAE6",
+                mutedText: "#ACB9B1",
+                surface: "#23302A",
+                border: "#3B4A42",
+                quoteBorder: "#52695D",
+                link: "#8BC8AA"
+            )
+        }
+    }
+
+    @MainActor
+    var backgroundColor: NSColor {
+        Self.color(from: palette.background)
+    }
+
+    @MainActor
+    var textColor: NSColor {
+        Self.color(from: palette.text)
+    }
+
+    @MainActor
+    var appearance: NSAppearance? {
+        NSAppearance(named: family == .dark ? .darkAqua : .aqua)
+    }
+
+    var screenCSS: String {
+        let palette = palette
+        return """
         :root {
-          color-scheme: light dark;
+          color-scheme: \(family.rawValue);
           font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
-          font-size: \(bodyFontSize)px;
+          font-size: \(Self.bodyFontSize)px;
           line-height: 1.75;
           --document-block-gap: 1.75rem;
-          color: #262522;
-          background: #fbfaf7;
+          --document-background: \(palette.background);
+          --document-text: \(palette.text);
+          --document-muted-text: \(palette.mutedText);
+          --document-surface: \(palette.surface);
+          --document-border: \(palette.border);
+          --document-quote-border: \(palette.quoteBorder);
+          --document-link: \(palette.link);
+          color: var(--document-text);
+          background: var(--document-background);
+        }
+
+        html {
+          min-height: 100%;
+          background: var(--document-background);
         }
 
         body {
-          max-width: calc(\(maximumLineWidth)px + \(minimumHorizontalInset * 2)px);
+          max-width: calc(\(Self.maximumLineWidth)px + \(Self.minimumHorizontalInset * 2)px);
           margin: 0 auto;
-          padding: max(\(minimumVerticalInset)px, \(typewriterPosition * 100)vh)
-            \(minimumHorizontalInset)px
-            max(8rem, \(typewriterPosition * 100)vh);
+          padding: max(\(Self.minimumVerticalInset)px, \(Self.typewriterPosition * 100)vh)
+            \(Self.minimumHorizontalInset)px
+            max(8rem, \(Self.typewriterPosition * 100)vh);
           overflow-wrap: break-word;
+          background: var(--document-background);
         }
 
-        @media (prefers-color-scheme: dark) {
+        @media print {
           :root {
-            color: #e8e5df;
-            background: #1d1c1a;
+            font-size: 10.5pt;
+            --document-block-gap: 1.35rem;
           }
+
+          html,
+          body {
+            min-height: 100%;
+            background: var(--document-background);
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+        }
+
+        @page {
+          background: \(palette.background);
         }
         """
     }
 
-    private static func dynamicColor(
-        light: (Int, Int, Int),
-        dark: (Int, Int, Int)
-    ) -> NSColor {
-        NSColor(name: nil) { appearance in
-            let components = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-                ? dark
-                : light
-            return NSColor(
-                srgbRed: CGFloat(components.0) / 255,
-                green: CGFloat(components.1) / 255,
-                blue: CGFloat(components.2) / 255,
-                alpha: 1
-            )
+    @MainActor
+    private static func color(from hex: String) -> NSColor {
+        let digits = hex.dropFirst()
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else {
+            preconditionFailure("Document theme colors must use six-digit hexadecimal values.")
         }
+
+        return NSColor(
+            srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+            green: CGFloat((value >> 8) & 0xFF) / 255,
+            blue: CGFloat(value & 0xFF) / 255,
+            alpha: 1
+        )
     }
 }
