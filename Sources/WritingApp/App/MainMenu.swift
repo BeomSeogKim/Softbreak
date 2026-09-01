@@ -6,7 +6,8 @@ enum MainMenuFactory {
         for application: NSApplication,
         documentController: MarkdownDocumentController,
         recentDocumentsMenuCoordinator: RecentDocumentsMenuCoordinator,
-        themeController: DocumentThemeController
+        themeController: DocumentThemeController,
+        editorBehaviorController: EditorBehaviorController
     ) -> NSMenu {
         let applicationName = Bundle.main.object(
             forInfoDictionaryKey: "CFBundleDisplayName"
@@ -26,7 +27,10 @@ enum MainMenuFactory {
         )
         mainMenu.addSubmenu(makeEditMenu(), titled: "Edit")
         mainMenu.addSubmenu(makeFormatMenu(), titled: "Format")
-        mainMenu.addSubmenu(makeViewMenu(), titled: "View")
+        mainMenu.addSubmenu(
+            makeViewMenu(editorBehaviorController: editorBehaviorController),
+            titled: "View"
+        )
         mainMenu.addSubmenu(
             makeThemeMenu(themeController: themeController),
             titled: "Theme"
@@ -402,13 +406,30 @@ enum MainMenuFactory {
         return menu
     }
 
-    private static func makeViewMenu() -> NSMenu {
+    static func makeViewMenu(
+        editorBehaviorController: EditorBehaviorController
+    ) -> NSMenu {
         let menu = NSMenu(title: "View")
         menu.addItem(
             item(
                 titled: "Toggle Read View",
                 action: #selector(EditorWindowController.toggleReadMode(_:)),
                 keyEquivalent: "r"
+            )
+        )
+        menu.addItem(.separator())
+        menu.addItem(
+            item(
+                titled: "Paragraph Focus",
+                action: #selector(EditorBehaviorController.toggleParagraphFocus(_:)),
+                target: editorBehaviorController
+            )
+        )
+        menu.addItem(
+            item(
+                titled: "Typewriter Scrolling",
+                action: #selector(EditorBehaviorController.toggleTypewriterScrolling(_:)),
+                target: editorBehaviorController
             )
         )
         menu.addItem(.separator())

@@ -9,11 +9,15 @@ final class FocusedTextView: NSTextView {
     private let contentStorage: NSTextContentStorage
     private let modernLayoutManager: NSTextLayoutManager
     private var theme: DocumentTheme
+    private var editorBehaviorState: EditorBehaviorState
     private var focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
     private var isApplyingPresentationAttributes = false
     private var lastAppliedInset = NSSize(width: -1, height: -1)
 
-    init(theme: DocumentTheme = .defaultTheme) {
+    init(
+        theme: DocumentTheme = .defaultTheme,
+        editorBehaviorState: EditorBehaviorState = .defaultState
+    ) {
         let contentStorage = NSTextContentStorage()
         let layoutManager = NSTextLayoutManager()
         let textContainer = NSTextContainer(
@@ -26,6 +30,7 @@ final class FocusedTextView: NSTextView {
         self.contentStorage = contentStorage
         self.modernLayoutManager = layoutManager
         self.theme = theme
+        self.editorBehaviorState = editorBehaviorState
 
         super.init(frame: .zero, textContainer: textContainer)
 
@@ -85,6 +90,28 @@ final class FocusedTextView: NSTextView {
         restyleForCurrentTheme()
     }
 
+    func applyEditorBehaviorState(_ state: EditorBehaviorState) {
+        guard state != editorBehaviorState else { return }
+
+        let paragraphFocusChanged = state.paragraphFocusEnabled
+            != editorBehaviorState.paragraphFocusEnabled
+        let typewriterScrollingChanged = state.typewriterScrollingEnabled
+            != editorBehaviorState.typewriterScrollingEnabled
+        editorBehaviorState = state
+
+        if paragraphFocusChanged {
+            restyleForCurrentTheme()
+        }
+
+        if typewriterScrollingChanged {
+            lastAppliedInset = NSSize(width: -1, height: -1)
+            updateTextContainerInsetIfNeeded()
+            if state.typewriterScrollingEnabled {
+                scrollSelectionToTypewriterPosition()
+            }
+        }
+    }
+
     /// Replaces source text without registering an undo action or emitting a document edit.
     func loadMarkdown(_ markdown: String) {
         withoutUndoRegistration {
@@ -92,7 +119,9 @@ final class FocusedTextView: NSTextView {
 
             let attributedString = NSAttributedString(
                 string: markdown,
-                attributes: dimmedAttributes
+                attributes: editorBehaviorState.paragraphFocusEnabled
+                    ? dimmedAttributes
+                    : focusedAttributes
             )
             textStorage?.setAttributedString(attributedString)
             focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
@@ -106,6 +135,11 @@ final class FocusedTextView: NSTextView {
     /// total document size. Pass the post-edit range for paste and multi-paragraph edits.
     func applyParagraphFocus(editedRange: NSRange? = nil) {
         guard !isApplyingPresentationAttributes, let textStorage else { return }
+        guard editorBehaviorState.paragraphFocusEnabled else {
+            focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
+            typingAttributes = focusedAttributes
+            return
+        }
 
         isApplyingPresentationAttributes = true
         defer { isApplyingPresentationAttributes = false }
@@ -149,7 +183,8 @@ final class FocusedTextView: NSTextView {
     /// Keeps the insertion point near the vertical reading position. Generous top and bottom
     /// text-container insets let the first and last paragraphs reach the same position.
     func scrollSelectionToTypewriterPosition() {
-        guard selectedRange().length == 0,
+        guard editorBehaviorState.typewriterScrollingEnabled,
+              selectedRange().length == 0,
               let window,
               let scrollView = enclosingScrollView
         else { return }
@@ -288,10 +323,12 @@ final class FocusedTextView: NSTextView {
             DocumentTheme.minimumHorizontalInset,
             floor((viewportSize.width - DocumentTheme.maximumLineWidth) / 2)
         )
-        let verticalInset = max(
-            DocumentTheme.minimumVerticalInset,
-            floor(viewportSize.height * DocumentTheme.typewriterPosition)
-        )
+        let verticalInset = editorBehaviorState.typewriterScrollingEnabled
+            ? max(
+                DocumentTheme.minimumVerticalInset,
+                floor(viewportSize.height * DocumentTheme.typewriterPosition)
+            )
+            : DocumentTheme.minimumVerticalInset
         let proposedInset = NSSize(width: horizontalInset, height: verticalInset)
 
         guard abs(lastAppliedInset.width - proposedInset.width) > 0.5
@@ -315,7 +352,10 @@ final class FocusedTextView: NSTextView {
 
             let fullRange = NSRange(location: 0, length: textStorage.length)
             if fullRange.length > 0 {
-                textStorage.addAttributes(dimmedAttributes, range: fullRange)
+                let baseAttributes = editorBehaviorState.paragraphFocusEnabled
+                    ? dimmedAttributes
+                    : focusedAttributes
+                textStorage.addAttributes(baseAttributes, range: fullRange)
             }
             focusedParagraphRange = NSRange(location: NSNotFound, length: 0)
         }

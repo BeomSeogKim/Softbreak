@@ -40,6 +40,8 @@ struct DocumentThemeTests {
             #expect(css.contains("--document-link: \(palette.link);"))
             #expect(css.contains("print-color-adjust: exact"))
             #expect(css.contains("@page {\n  background: \(palette.background);"))
+            #expect(css.contains("padding: \(DocumentTheme.minimumVerticalInset)px"))
+            #expect(!css.contains("\(DocumentTheme.typewriterPosition * 100)vh"))
             #expect(!css.contains("prefers-color-scheme"))
         }
     }

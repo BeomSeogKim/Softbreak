@@ -10,9 +10,15 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
     private var pendingEditedRange: NSRange?
     private var isLoadingMarkdown = false
 
-    init(theme: DocumentTheme = .defaultTheme) {
+    init(
+        theme: DocumentTheme = .defaultTheme,
+        editorBehaviorState: EditorBehaviorState = .defaultState
+    ) {
         self.theme = theme
-        self.textView = FocusedTextView(theme: theme)
+        self.textView = FocusedTextView(
+            theme: theme,
+            editorBehaviorState: editorBehaviorState
+        )
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -62,9 +68,7 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
 
     override func viewDidAppear() {
         super.viewDidAppear()
-        focusEditor()
-        textView.applyParagraphFocus()
-        textView.scrollSelectionToTypewriterPosition()
+        resumeWriting()
     }
 
     override func viewDidLayout() {
@@ -76,11 +80,22 @@ final class EditorViewController: NSViewController, NSTextViewDelegate {
         view.window?.makeFirstResponder(textView)
     }
 
+    func resumeWriting() {
+        focusEditor()
+        textView.updateViewportMetrics()
+        textView.applyParagraphFocus()
+        textView.scrollSelectionToTypewriterPosition()
+    }
+
     func applyTheme(_ theme: DocumentTheme) {
         self.theme = theme
         if isViewLoaded {
             textView.applyTheme(theme)
         }
+    }
+
+    func applyEditorBehaviorState(_ state: EditorBehaviorState) {
+        textView.applyEditorBehaviorState(state)
     }
 
     func textView(

@@ -5,6 +5,7 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
     private var documentController: MarkdownDocumentController?
     private var recentDocumentsMenuCoordinator: RecentDocumentsMenuCoordinator?
     private var themeController: DocumentThemeController?
+    private var editorBehaviorController: EditorBehaviorController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         NSWindow.allowsAutomaticWindowTabbing = false
@@ -17,10 +18,12 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
             documentController: documentController
         )
         let themeController = DocumentThemeController()
+        let editorBehaviorController = EditorBehaviorController()
 
         self.documentController = documentController
         self.recentDocumentsMenuCoordinator = recentDocumentsMenuCoordinator
         self.themeController = themeController
+        self.editorBehaviorController = editorBehaviorController
 
         let application = notification.object as? NSApplication ?? NSApplication.shared
         themeController.applyAppearance(to: application)
@@ -28,7 +31,8 @@ final class ApplicationDelegate: NSObject, NSApplicationDelegate {
             for: application,
             documentController: documentController,
             recentDocumentsMenuCoordinator: recentDocumentsMenuCoordinator,
-            themeController: themeController
+            themeController: themeController,
+            editorBehaviorController: editorBehaviorController
         )
     }
 

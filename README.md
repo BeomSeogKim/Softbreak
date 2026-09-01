@@ -11,7 +11,7 @@ The editor keeps Markdown as plain text. It does not require an account, library
 ## First vertical slice
 
 - Native macOS document open, create, save, autosave, undo, and redo
-- A centered writing column with paragraph focus and typewriter scrolling
+- A quiet, top-starting writing column with optional paragraph focus and typewriter scrolling
 - Standard Markdown formatting commands in the menu and responder chain
 - Three light themes and three dark themes shared by Write and Read
 - A rendered Read view using the selected colors and the same body font, measure, and vertical rhythm as Write
@@ -49,8 +49,10 @@ The packaging script creates a standard `.app` bundle, copies the shared documen
 - `Option-Command-Q`, `Shift-Command-8`, `Shift-Command-7`, `Option-Command-L`: quote, bulleted list, numbered list, and task list
 - `Command-R`: toggle the visually matched Write and Read views
 - `Shift-Command-E`: choose a destination, generate the current document, and export an A4 PDF
+- `View → Paragraph Focus`: dim everything outside the active paragraph; on by default
+- `View → Typewriter Scrolling`: keep the caret at 42% of the viewport; off by default
 
-Standard macOS New, Open, Save, Save As, undo, redo, find, full screen, and recent-document commands are available from the menu bar.
+The two writing behaviors are independent, apply to Write only, and persist across launches. Standard macOS New, Open, Save, Save As, undo, redo, find, full screen, and recent-document commands are available from the menu bar.
 
 ## Themes
 

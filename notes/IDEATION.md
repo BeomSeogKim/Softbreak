@@ -2,14 +2,14 @@
 
 ## Status
 
-Discovery and the first two feedback passes are complete. This file is the source of truth for product direction and benchmark evidence.
+Discovery and the first three feedback passes are complete. This file is the source of truth for product direction and benchmark evidence.
 
 ## Product definition
 
 - **First writer:** A macOS user who writes local Markdown documents, especially essays, notes, specifications, and reports that may need to become PDFs.
 - **Writing moment:** Starting or continuing a document when the writer wants the interface, Markdown syntax, preview switching, and print setup to recede.
 - **Problem:** Existing tools split their strengths. Inline rendering can make a document pleasant to read but complicate source editing; source-first tools protect Markdown but often separate writing, reading, and final print layout.
-- **Smallest complete flow:** Create or open a `.md` file, write with the current paragraph held in view, apply common Markdown structures from the keyboard, read the rendered document without a visual reset, and directly export an A4 PDF.
+- **Smallest complete flow:** Create or open a `.md` file, write from a familiar top position with optional focus aids, apply common Markdown structures from the keyboard, read the rendered document without a visual reset, and directly export an A4 PDF.
 - **Validation:** Compare the same writing and export task with Typora and iA Writer. Standard formatting shortcuts must remain available, Write and Read must share their base visual tokens, a round-trip fixture must stay byte-for-byte safe, and PDF generation must not become a permanent screen mode.
 
 ## Product principle
@@ -49,7 +49,7 @@ The continuity promise is precise: Write and Read share the selected background,
 2. **Storage:** Plain local `.md` and `.markdown` files. No library or account requirement.
 3. **Typing surface:** AppKit `NSTextView` and TextKit 2. Keep the Markdown source as the only document truth.
 4. **Editing model:** Source-first. Syntax may be de-emphasized, but delimiters are not hidden in the first slice.
-5. **Focus:** Paragraph focus and typewriter scrolling ship in the first slice; sentence focus can follow after Korean boundary behavior is tested.
+5. **Focus:** Paragraph Focus and Typewriter Scrolling are independent global View preferences. Paragraph Focus starts on; Typewriter Scrolling starts off so new users begin at the normal top position. Both remember the last choice and change presentation only. Sentence focus can follow after Korean boundary behavior is tested.
 6. **Rendering:** One safe Markdown-to-HTML renderer and one selected theme for Read and print export. Write consumes the same background, body font, measure, and rhythm tokens.
 7. **PDF:** PDF is export-only. Ask for the destination first, generate a fresh A4 artifact from the current Markdown, relative-resource base, and selected theme, validate it, and write it atomically.
 8. **Keyboard contract:** `Command-0...6`, `Command-B`, `Command-I`, and `Command-K` follow the common Typora/iA Writer contract. Code, strikethrough, quote, bulleted/numbered/task lists, and heading level changes also live in Format so macOS App Shortcuts can remap them.
@@ -66,6 +66,7 @@ The continuity promise is precise: Write and Read share the selected background,
 - `Command-R` for Read and direct `Shift-Command-E` PDF export
 - Shared screen tokens across Write and Read
 - A direct Theme menu with three light and three dark palettes, global persistence, and matching Write, Read, and PDF output
+- Independent Paragraph Focus and Typewriter Scrolling View toggles, with a top-starting default and persisted choices
 
 ### Next candidates
 

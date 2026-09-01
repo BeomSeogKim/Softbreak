@@ -180,9 +180,9 @@ enum DocumentTheme: String, CaseIterable, Sendable {
         body {
           max-width: calc(\(Self.maximumLineWidth)px + \(Self.minimumHorizontalInset * 2)px);
           margin: 0 auto;
-          padding: max(\(Self.minimumVerticalInset)px, \(Self.typewriterPosition * 100)vh)
+          padding: \(Self.minimumVerticalInset)px
             \(Self.minimumHorizontalInset)px
-            max(8rem, \(Self.typewriterPosition * 100)vh);
+            max(8rem, \(Self.minimumVerticalInset)px);
           overflow-wrap: break-word;
           background: var(--document-background);
         }

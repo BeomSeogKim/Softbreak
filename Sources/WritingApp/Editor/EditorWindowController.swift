@@ -20,6 +20,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     private weak var exportToolbarItem: NSToolbarItem?
     private var theme: DocumentTheme
+    private var editorBehaviorState: EditorBehaviorState
     private var mode = Mode.write
     private var activePDFRequest: DocumentRenderRequest?
     private var pendingPDFDestination: URL?
@@ -44,9 +45,14 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
     init(document: WritingDocument) {
         let theme = DocumentThemePreferences().selectedTheme
+        let editorBehaviorState = EditorBehaviorPreferences().selectedState
         let previewController = DocumentPreviewController(theme: theme)
         self.theme = theme
-        self.editorViewController = EditorViewController(theme: theme)
+        self.editorBehaviorState = editorBehaviorState
+        self.editorViewController = EditorViewController(
+            theme: theme,
+            editorBehaviorState: editorBehaviorState
+        )
         self.previewController = previewController
         self.writingDocument = document
         self.modeControl = NSSegmentedControl(
@@ -101,6 +107,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self,
             selector: #selector(documentThemeDidChange(_:)),
             name: .documentThemeDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(editorBehaviorDidChange(_:)),
+            name: .editorBehaviorDidChange,
             object: nil
         )
     }
@@ -291,7 +303,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
 
         switch nextMode {
         case .write:
-            editorViewController.focusEditor()
+            editorViewController.resumeWriting()
 
         case .read:
             previewController.showReadPreview(
@@ -416,6 +428,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             baseURL: document.fileURL?.deletingLastPathComponent(),
             theme: nextTheme
         )
+    }
+
+    @objc private func editorBehaviorDidChange(_ notification: Notification) {
+        guard
+            let nextState = notification.userInfo?[EditorBehaviorController.notificationStateKey]
+                as? EditorBehaviorState,
+            nextState != editorBehaviorState
+        else {
+            return
+        }
+
+        editorBehaviorState = nextState
+        editorViewController.applyEditorBehaviorState(nextState)
+        if mode == .write {
+            editorViewController.resumeWriting()
+        }
     }
 
     private func updateExportAvailability() {
