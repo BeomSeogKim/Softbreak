@@ -35,7 +35,7 @@ final class MarkdownDocumentController: NSDocumentController {
                 .fileReadUnknown,
                 userInfo: [
                     NSURLErrorKey: url,
-                    NSLocalizedDescriptionKey: "Writing App opens .md and .markdown files.",
+                    NSLocalizedDescriptionKey: "Softbreak opens .md and .markdown files.",
                 ]
             )
         }

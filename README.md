@@ -1,6 +1,8 @@
-# Writing app
+# Softbreak
 
 A macOS-first Markdown editor for staying with the writing and taking the same typography cleanly to PDF.
+
+> Markdown, without breaking your flow.
 
 ## Product promise
 
@@ -27,7 +29,19 @@ The working product and benchmark decisions are recorded in [`notes/IDEATION.md`
 
 ## Status
 
-Discovery and the first interaction review are complete. The native slice is implemented and available as a local, ad-hoc-signed macOS app.
+Discovery and the first interaction review are complete. The native slice is implemented and available as an Apple Silicon beta for macOS 14 or later.
+
+## Install
+
+Install the current beta from the project Homebrew tap:
+
+```sh
+brew install --cask beomseogkim/tap/softbreak
+```
+
+The beta is ad-hoc signed because the project does not yet have an Apple Developer ID certificate. macOS therefore requires one explicit approval on first launch: try to open Softbreak, then go to **System Settings → Privacy & Security** and choose **Open Anyway**. Only do this after confirming that the download came from this repository's release.
+
+You can also download the DMG directly from [GitHub Releases](https://github.com/BeomSeogKim/Softbreak/releases/latest), open it, and drag `Softbreak.app` to `Applications`.
 
 ## Build and run
 
@@ -36,10 +50,16 @@ Requirements: macOS 14 or later and Xcode with the Swift 6 toolchain.
 ```sh
 swift test
 ./scripts/make-app.sh release
-open "build/Writing App.app"
+open "build/Softbreak.app"
 ```
 
-The packaging script creates a standard `.app` bundle, copies the shared document stylesheet into `Contents/Resources`, and verifies its ad-hoc signature. Distribution signing, notarization, sandboxing, and an installer are intentionally outside this first local slice.
+The packaging script creates a standard `.app` bundle, copies the shared document stylesheet into `Contents/Resources`, and verifies its signature. To create a versioned Apple Silicon DMG and SHA-256 checksum, run:
+
+```sh
+./scripts/make-dmg.sh 0.1.0-beta.1
+```
+
+Developer ID signing and notarization remain future distribution work. Set `CODE_SIGN_IDENTITY` when running the packaging scripts after a Developer ID certificate becomes available.
 
 ## Writing flow
 
@@ -59,3 +79,7 @@ The two writing behaviors are independent, apply to Write only, and persist acro
 ## Themes
 
 The top-level `Theme` menu offers Paper, Snow, and Sage for light writing, plus Ink, Midnight, and Pine for dark writing. The choice applies immediately to every open document, persists across launches, and changes presentation only: Markdown, selection, and undo history remain untouched.
+
+## License
+
+Softbreak is available under the [MIT License](LICENSE).

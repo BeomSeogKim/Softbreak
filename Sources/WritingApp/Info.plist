@@ -5,15 +5,15 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Writing App</string>
+    <string>Softbreak</string>
     <key>CFBundleExecutable</key>
-    <string>WritingApp</string>
+    <string>Softbreak</string>
     <key>CFBundleIdentifier</key>
-    <string>kr.addy.writingapp</string>
+    <string>kr.addy.softbreak</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Writing App</string>
+    <string>Softbreak</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
