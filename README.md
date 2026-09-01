@@ -33,15 +33,33 @@ Discovery and the first interaction review are complete. The native slice is imp
 
 ## Install
 
-Install the current beta from the project Homebrew tap:
+Install the current beta from the project Homebrew tap, then explicitly remove
+macOS quarantine from this app bundle:
 
 ```sh
 brew install --cask beomseogkim/tap/softbreak
+xattr -dr com.apple.quarantine /Applications/Softbreak.app
+open /Applications/Softbreak.app
 ```
 
-The beta is ad-hoc signed because the project does not yet have an Apple Developer ID certificate. macOS therefore requires one explicit approval on first launch: try to open Softbreak, then go to **System Settings → Privacy & Security** and choose **Open Anyway**. Only do this after confirming that the download came from this repository's release.
+The beta is ad-hoc signed because the project does not yet have an Apple
+Developer ID certificate. A quarantined download may therefore be reported as
+damaged even when its checksum and ad-hoc signature are valid. The `xattr`
+command above bypasses Gatekeeper for `Softbreak.app` only. Run it only after
+confirming that Homebrew downloaded this project's release.
 
-You can also download the DMG directly from [GitHub Releases](https://github.com/BeomSeogKim/Softbreak/releases), open it, and drag `Softbreak.app` to `Applications`.
+If macOS already moved the app to the Bin, restore it before removing
+quarantine:
+
+```sh
+brew reinstall --cask beomseogkim/tap/softbreak
+xattr -dr com.apple.quarantine /Applications/Softbreak.app
+open /Applications/Softbreak.app
+```
+
+You can also download the DMG directly from [GitHub Releases](https://github.com/BeomSeogKim/Softbreak/releases),
+open it, and drag `Softbreak.app` to `Applications`. The same
+quarantine-removal step is required for the current unsigned beta.
 
 ## Build and run
 
