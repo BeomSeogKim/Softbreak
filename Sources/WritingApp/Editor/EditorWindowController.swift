@@ -8,6 +8,11 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         case pdf
     }
 
+    private struct PDFRequest: Equatable {
+        let markdown: String
+        let baseURL: URL?
+    }
+
     private static let modeItemIdentifier = NSToolbarItem.Identifier("WritingApp.Mode")
     private static let exportItemIdentifier = NSToolbarItem.Identifier("WritingApp.ExportPDF")
 
@@ -23,6 +28,7 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
     private var lastGeneratedMarkdown: String?
     private var lastGeneratedBaseURL: URL?
     private var exportAfterPDFGeneration = false
+    private var activePDFRequest: PDFRequest?
     private var isGeneratingPDF = false {
         didSet {
             progressIndicator.isHidden = !isGeneratingPDF
@@ -77,6 +83,12 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
             self,
             selector: #selector(documentDidReplaceContents(_:)),
             name: .markdownDocumentDidReplaceContents,
+            object: document
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(documentFileURLDidChange(_:)),
+            name: .markdownDocumentDidChangeFileURL,
             object: document
         )
     }
@@ -285,38 +297,67 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         exportAfterPDFGeneration = exportAfterPDFGeneration || exportWhenReady
         guard !isGeneratingPDF else { return }
 
-        let markdown = document.markdown
-        let baseURL = document.fileURL?.deletingLastPathComponent()
+        let request = PDFRequest(
+            markdown: document.markdown,
+            baseURL: document.fileURL?.deletingLastPathComponent()
+        )
+        let cachedPDFIsCurrent = previewController.cachedPDFURL != nil
+            && lastGeneratedMarkdown == request.markdown
+            && lastGeneratedBaseURL == request.baseURL
+
+        if !cachedPDFIsCurrent {
+            previewController.clearDisplayedPDF()
+        }
+
+        activePDFRequest = request
         isGeneratingPDF = true
 
         previewController.generatePDF(
-            markdown: markdown,
-            baseURL: baseURL
+            markdown: request.markdown,
+            baseURL: request.baseURL
         ) { [weak self] result in
-            guard let self else { return }
+            guard let self, self.activePDFRequest == request else { return }
+
+            self.activePDFRequest = nil
             self.isGeneratingPDF = false
+            let latestRequest = self.currentPDFRequest
+            let shouldExport = self.exportAfterPDFGeneration
+
+            if case .success = result {
+                self.lastGeneratedMarkdown = request.markdown
+                self.lastGeneratedBaseURL = request.baseURL
+            }
+
+            if latestRequest != request {
+                if self.mode == .pdf || shouldExport {
+                    self.generatePDF(exportWhenReady: shouldExport)
+                } else {
+                    self.exportAfterPDFGeneration = false
+                }
+                return
+            }
 
             switch result {
             case .success:
-                self.lastGeneratedMarkdown = markdown
-                self.lastGeneratedBaseURL = baseURL
-
-                let shouldExport = self.exportAfterPDFGeneration
                 self.exportAfterPDFGeneration = false
-                let currentBaseURL = self.writingDocument?.fileURL?.deletingLastPathComponent()
-                let generatedPDFIsCurrent = self.writingDocument?.markdown == markdown
-                    && currentBaseURL == baseURL
-
-                if !generatedPDFIsCurrent, self.mode == .pdf || shouldExport {
-                    self.generatePDF(exportWhenReady: shouldExport)
-                } else if shouldExport, let window = self.window {
+                if shouldExport, let window = self.window {
                     self.previewController.exportCachedPDF(from: window)
                 }
             case .failure(let error):
                 self.exportAfterPDFGeneration = false
+                self.previewController.clearDisplayedPDF()
                 self.presentPDFError(error)
             }
         }
+    }
+
+    private var currentPDFRequest: PDFRequest? {
+        guard let document = writingDocument else { return nil }
+
+        return PDFRequest(
+            markdown: document.markdown,
+            baseURL: document.fileURL?.deletingLastPathComponent()
+        )
     }
 
     private func presentPDFError(_ error: Error) {
@@ -332,6 +373,22 @@ final class EditorWindowController: NSWindowController, NSWindowDelegate, NSTool
         guard let document = writingDocument else { return }
 
         editorViewController.markdown = document.markdown
+        switch mode {
+        case .write:
+            break
+        case .read:
+            previewController.showReadPreview(
+                markdown: document.markdown,
+                baseURL: document.fileURL?.deletingLastPathComponent()
+            )
+        case .pdf:
+            generatePDF(exportWhenReady: false)
+        }
+    }
+
+    @objc private func documentFileURLDidChange(_ notification: Notification) {
+        guard let document = writingDocument else { return }
+
         switch mode {
         case .write:
             break

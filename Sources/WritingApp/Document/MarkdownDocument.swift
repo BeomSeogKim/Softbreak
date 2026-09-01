@@ -26,6 +26,17 @@ final class MarkdownDocument: NSDocument {
         }
     }
 
+    override var fileURL: URL? {
+        didSet {
+            guard oldValue != fileURL else { return }
+
+            NotificationCenter.default.post(
+                name: .markdownDocumentDidChangeFileURL,
+                object: self
+            )
+        }
+    }
+
     /// Synchronizes text already tracked by the document's undo manager.
     ///
     /// NSTextView registers typing, undo, and redo with the responder chain's
@@ -119,5 +130,8 @@ typealias WritingDocument = MarkdownDocument
 extension Notification.Name {
     static let markdownDocumentDidReplaceContents = Notification.Name(
         "MarkdownDocumentDidReplaceContents"
+    )
+    static let markdownDocumentDidChangeFileURL = Notification.Name(
+        "MarkdownDocumentDidChangeFileURL"
     )
 }

@@ -18,7 +18,9 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     private var resourceWaitToken: UUID?
     private var resourceWatchdog: Task<Void, Never>?
     private var activePrintOperation: NSPrintOperation?
+    private var activePrintOperationID: ObjectIdentifier?
     private var pendingPDFURL: URL?
+    private var abandonedPrintURLs: [ObjectIdentifier: URL] = [:]
 
     override init() {
         let css = Self.loadDocumentCSS()
@@ -51,10 +53,18 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         if let pendingPDFURL, pendingPDFURL != cachedPDFURL {
             try? FileManager.default.removeItem(at: pendingPDFURL)
         }
+
+        for url in abandonedPrintURLs.values where url != cachedPDFURL {
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     func showReadPreview(markdown: String, baseURL: URL?) {
         readView.loadHTMLString(renderer.render(markdown, baseURL: baseURL), baseURL: baseURL)
+    }
+
+    func clearDisplayedPDF() {
+        pdfView.document = nil
     }
 
     func generatePDF(
@@ -82,6 +92,15 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
             return
         }
 
+        let pdfBytes: Data
+        do {
+            pdfBytes = try Data(contentsOf: cachedPDFURL)
+        } catch {
+            let alert = NSAlert(error: error)
+            alert.beginSheetModal(for: window)
+            return
+        }
+
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.pdf]
         panel.canCreateDirectories = true
@@ -92,8 +111,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
             }
 
             do {
-                let bytes = try Data(contentsOf: cachedPDFURL)
-                try bytes.write(to: destinationURL, options: .atomic)
+                try pdfBytes.write(to: destinationURL, options: .atomic)
             } catch {
                 let alert = NSAlert(error: error)
                 alert.beginSheetModal(for: window)
@@ -230,6 +248,7 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         operation.canSpawnSeparateThread = true
 
         activePrintOperation = operation
+        activePrintOperationID = ObjectIdentifier(operation)
         pendingPDFURL = outputURL
         operation.runModal(
             for: window,
@@ -245,20 +264,30 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
         success: Bool,
         contextInfo: UnsafeMutableRawPointer?
     ) {
+        let operationID = ObjectIdentifier(operation)
         Task { @MainActor [weak self] in
-            self?.completePrintOperation(succeeded: success)
+            self?.completePrintOperation(operationID: operationID, succeeded: success)
         }
     }
 
-    private func completePrintOperation(succeeded: Bool) {
+    private func completePrintOperation(operationID: ObjectIdentifier, succeeded: Bool) {
+        guard operationID == activePrintOperationID else {
+            if let abandonedURL = abandonedPrintURLs.removeValue(forKey: operationID) {
+                try? FileManager.default.removeItem(at: abandonedURL)
+            }
+            return
+        }
+
         guard let outputURL = pendingPDFURL else {
             activePrintOperation = nil
+            activePrintOperationID = nil
             finishGeneration(with: .failure(DocumentPreviewError.printOperationFailed))
             return
         }
 
         pendingPDFURL = nil
         activePrintOperation = nil
+        activePrintOperationID = nil
 
         guard succeeded else {
             try? FileManager.default.removeItem(at: outputURL)
@@ -289,6 +318,13 @@ final class DocumentPreviewController: NSObject, WKNavigationDelegate {
     }
 
     private func finishGeneration(with result: Result<URL, Error>) {
+        if let activePrintOperationID, let pendingPDFURL {
+            abandonedPrintURLs[activePrintOperationID] = pendingPDFURL
+            self.activePrintOperation = nil
+            self.activePrintOperationID = nil
+            self.pendingPDFURL = nil
+        }
+
         let completion = generationCompletion
         generationCompletion = nil
         activeNavigation = nil
